@@ -249,7 +249,8 @@ Bootstrap: `import app.agents.handlers` in `main.py` lifespan registers all hand
 | `processor.text_extract` | `handlers/processors/text_extract.py` | Digital PDF text (PyMuPDF / Docling) | No |
 | `processor.ocr` | `handlers/processors/ocr.py` | Scanned PDF/images (RapidOCR default) | No |
 | `transform.field_extractor` | `handlers/transforms/field_extractor.py` | Structured fields via OpenAI | **Yes** |
-| `transform.rules` | `handlers/transforms/rules.py` | Flag / filter / validate rows | No |
+| `transform.normalize` | `handlers/transforms/normalize.py` | Deterministic date/amount/currency cleanup | No |
+| `transform.rules` | `handlers/transforms/rules.py` | Flag / filter / set on rows | No |
 | `transform.pipeline_refiner` | `handlers/transforms/pipeline_refiner.py` | Refine-time plan/prompt rewrite (Groq) | **Yes** |
 | `output.formatter` | `handlers/output/formatter.py` | Shape CSV/JSON/table | No |
 | `output.email` | `handlers/output/email_agent.py` | In-pipeline Resend; **reserves** monthly email units | No (HTTP) |

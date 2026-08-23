@@ -1,3 +1,8 @@
-"""Transform stage handlers — extraction and rules."""
+"""Transform stage handlers — extraction, normalize, and rules."""
 
-from app.agents.handlers.transforms import field_extractor, pipeline_refiner, rules  # noqa: F401
+from app.agents.handlers.transforms import (  # noqa: F401
+    field_extractor,
+    normalize,
+    pipeline_refiner,
+    rules,
+)

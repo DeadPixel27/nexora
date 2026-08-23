@@ -49,7 +49,8 @@
 | **OCR Agent** | Converts images/scanned PDFs to text (Tesseract) | ✅ `processor.ocr` |
 | **Text Extractor** | Pulls raw text from digital PDFs (PyMuPDF) | ✅ `processor.text_extract` |
 | **Field Extractor** | LLM extracts structured fields from text based on user description | ✅ `transform.field_extractor` |
-| **Rules Agent** | Applies user-defined conditions (flag if amount > X, filter by date, etc.) | ✅ `transform.rules` |
+| **Normalize Agent** | Deterministic cleanup of dates, amounts, currency, phones | ✅ `transform.normalize` |
+| **Rules Agent** | Flag / filter / set on extracted rows (gt, contains, exists, …) | ✅ `transform.rules` |
 | **Formatter Agent** | Compiles results into CSV/JSON/table format | ✅ `output.formatter` |
 | **Email Agent** | Sends extraction results via email (HTML table + CSV attachment) | ✅ `output.email` |
 | **Google Sheets Agent** | Pushes rows to a spreadsheet tab | ✅ `output.google_sheets` |
@@ -81,8 +82,9 @@ Documents: 10 scanned images
 Planner output:
 Step 1: OCR Agent (scanned images detected)
 Step 2: Field Extractor (fields: invoice_number, vendor, amount, date)
-Step 3: Rules Agent (flag: amount > 50000)
-Step 4: Formatter (output: CSV with flag column)
+Step 3: Normalize (amounts/dates canonical)
+Step 4: Rules Agent (flag: amount > 50000)
+Step 5: Formatter (output: CSV with flag column)
 ```
 
 ---

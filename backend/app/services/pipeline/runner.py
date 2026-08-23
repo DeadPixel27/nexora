@@ -307,19 +307,22 @@ async def execute_run(run_id: str) -> None:
             return
 
     final_output = ctx.data.get("output")
-    # Ensure confidence/validation survive even if formatter was skipped
+    # Ensure confidence/validation/filter counts survive even if formatter was skipped
     if isinstance(final_output, dict):
+        extras: dict = {}
         if "field_confidence" not in final_output and ctx.data.get("field_confidence"):
-            final_output = {
-                **final_output,
-                "field_confidence": ctx.data.get("field_confidence") or {},
-                "validation_warnings": ctx.data.get("validation_warnings") or {},
-            }
+            extras["field_confidence"] = ctx.data.get("field_confidence") or {}
+            extras["validation_warnings"] = ctx.data.get("validation_warnings") or {}
+        if "filtered_count" not in final_output and ctx.data.get("filtered_rows"):
+            extras["filtered_count"] = len(ctx.data.get("filtered_rows") or [])
+        if extras:
+            final_output = {**final_output, **extras}
     elif ctx.data.get("field_confidence") or ctx.data.get("validation_warnings"):
         final_output = {
             "rows": ctx.data.get("rows") or [],
             "field_confidence": ctx.data.get("field_confidence") or {},
             "validation_warnings": ctx.data.get("validation_warnings") or {},
+            "filtered_count": len(ctx.data.get("filtered_rows") or []),
         }
 
     logger.info("Run %s completed — %d row(s)", run_id, len(ctx.data.get("rows", [])))

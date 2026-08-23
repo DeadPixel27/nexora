@@ -65,6 +65,16 @@ def _build_steps(
     )
     order += 1
 
+    steps.append(
+        PlannedStep(
+            step_order=order,
+            agent_type="transform.normalize",
+            config={},
+            reason="Normalize dates, amounts, and currency to canonical forms",
+        )
+    )
+    order += 1
+
     if template.rules:
         steps.append(
             PlannedStep(

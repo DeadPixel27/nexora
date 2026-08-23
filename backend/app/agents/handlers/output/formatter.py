@@ -17,23 +17,26 @@ class FormatterHandler(StepHandler):
         config: dict[str, Any],
     ) -> StepResult:
         rows = ctx.data.get("rows", [])
-        if not rows:
+        filtered_rows = ctx.data.get("filtered_rows") or []
+        if not rows and not filtered_rows:
             raise ValueError("No rows available — nothing to format")
 
         output_format = config.get("output_format", "json").lower()
         include_flags = config.get("include_flags", True)
 
         if output_format == "csv":
-            content = _rows_to_csv(rows, include_flags)
+            content = _rows_to_csv(rows, include_flags) if rows else ""
         else:
             content = json.dumps(rows, indent=2, default=str)
             output_format = "json"
 
+        filtered_count = len(filtered_rows)
         output = {
             "format": output_format,
             "content": content,
             "rows": rows,
             "row_count": len(rows),
+            "filtered_count": filtered_count,
             "field_confidence": ctx.data.get("field_confidence") or {},
             "validation_warnings": ctx.data.get("validation_warnings") or {},
         }
@@ -43,6 +46,7 @@ class FormatterHandler(StepHandler):
             output={
                 "format": output_format,
                 "row_count": len(rows),
+                "filtered_count": filtered_count,
                 "content_preview": content[:200],
                 "documents_with_warnings": sum(
                     1

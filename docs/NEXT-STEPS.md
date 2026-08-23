@@ -26,7 +26,9 @@ Launch product (V2/V3 + auth/metering) is built. Remaining work below.
 - GitHub Actions CI (`pytest` + `npm run build`)
 - Frontend tests (Vitest)
 - Supabase Auth (password / magic link) — JWT+Google is enough for launch
-
+- **`transform.calculator`** — derived fields (`tax_pct = tax / subtotal`) without LLM math; after normalize/rules. Also [AGENTS.md](./AGENTS.md) Tier 2.
+- **Visual rule editor** — point-and-click `field + operator + value + action` on workflow settings; same JSON as chat/templates. Discoverability polish once chat authoring is proven.
+- Per-transaction / nested array rules (`transactions[]`) — [SCALING-AND-JOBS.md](./SCALING-AND-JOBS.md)
 ### Privacy, logging, retention (decided)
 
 - **Stdout = metadata only.** Do not log OCR/extract strings, field values, prompt tails, LLM JSON, or recipient emails in production. Keep `run_id` / `user_id` / timings / `prompt_fp`. Verbose refine dumps need `LOG_PAYLOADS=true` (local only).
@@ -72,8 +74,9 @@ Until this exists, keep files and results for MVP (history + user refine). No 24
 | Auto-correct / learning from edits | Store corrections → few-shot on next similar docs |
 | Editable cells + run diff / validation suggestions | Results UX polish |
 | Watch folder / inbox automation | Drive/Gmail → saved workflow → Sheets/email |
-| New agents | Summarizer, classifier, table extract — [AGENTS.md](./AGENTS.md) |
-| Stripe, rule engine, dynamic schema via chat | Monetization / power features |
+| New agents | Summarizer, classifier, table extract, calculator — [AGENTS.md](./AGENTS.md) |
+| Visual rule editor | Workflow settings UI for flag/filter/set rules (see Deferred above) |
+| Stripe, dynamic schema via chat | Monetization / power features |
 
 **Research locks (do not reopen for launch):** GPT-4o extract, RapidOCR, per-page metering, no blind prompt hardening, no Claude routing yet.
 

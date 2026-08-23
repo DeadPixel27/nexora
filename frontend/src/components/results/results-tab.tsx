@@ -8,6 +8,7 @@ import type { FieldConfidence, ValidationWarning } from "@/lib/api";
 interface ResultsTabPanelProps {
   rows: Record<string, unknown>[];
   flagCount: number;
+  filteredCount?: number;
   runtimeLabel?: string;
   isUpdating?: boolean;
   fieldConfidence?: Record<string, FieldConfidence>;
@@ -24,6 +25,7 @@ function flattenWarnings(
 export function ResultsTabPanel({
   rows,
   flagCount,
+  filteredCount = 0,
   runtimeLabel,
   isUpdating = false,
   fieldConfidence,
@@ -49,6 +51,11 @@ export function ResultsTabPanel({
         <span className="inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-[11px] font-medium">
           {flagCount} flagged
         </span>
+        {filteredCount > 0 && (
+          <span className="inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+            {filteredCount} row{filteredCount === 1 ? "" : "s"} filtered by rules
+          </span>
+        )}
         {runtimeLabel && (
           <span className="inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-[11px] font-medium">
             {runtimeLabel}

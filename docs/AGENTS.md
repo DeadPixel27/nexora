@@ -4,17 +4,18 @@
 
 ---
 
-## Current Agents (5)
+## Current Agents (6)
 
 | Agent | Type | What it does | Uses LLM? |
 |-------|------|--------------|-----------|
 | `processor.text_extract` | Processor | PDF → text via PyMuPDF | No |
 | `processor.ocr` | Processor | Image/scanned PDF → text via Tesseract | No |
 | `transform.field_extractor` | Transform | Text → structured fields via Groq LLM | **Yes** |
-| `transform.rules` | Transform | Apply flags/filters (gt, lt, eq, etc.) | No |
+| `transform.normalize` | Transform | Deterministic dates/amounts/currency/phones cleanup | No |
+| `transform.rules` | Transform | Flag / filter / set on rows (gt, contains, exists, …) | No |
 | `output.formatter` | Output | Rows → CSV or JSON | No |
 
-**These 5 cover 90% of document extraction use cases. Enough for launch.**
+**These cover most document extraction use cases. Enough for launch.**
 
 ---
 
@@ -34,7 +35,8 @@
 |-------|--------------|-----|
 | **`transform.translator`** | Translate extracted text/fields to another language | Opens non-English markets. Multilingual invoices are a real pain point. |
 | **`transform.deduplicator`** | Flag or merge duplicate rows across documents | Accountants processing 100 invoices often have duplicates. |
-| **`transform.calculator`** | Compute derived fields (totals, percentages, differences) | "Add tax_percentage = tax / subtotal" |
+| **`transform.calculator`** | Compute derived fields (totals, percentages, differences) | "Add tax_percentage = tax / subtotal" — tracked in [NEXT-STEPS.md](./NEXT-STEPS.md); ship after normalize/rules |
+
 
 ### Tier 3: Add When Users Ask
 

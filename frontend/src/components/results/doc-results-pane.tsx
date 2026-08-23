@@ -16,6 +16,7 @@ import type { FieldConfidence, ValidationWarning } from "@/lib/api";
 interface DocResultsPaneProps {
   rows: Record<string, unknown>[];
   flagCount: number;
+  filteredCount?: number;
   isUpdating?: boolean;
   fieldConfidence?: Record<string, FieldConfidence>;
   validationWarnings?: ValidationWarning[];
@@ -31,6 +32,7 @@ function flattenDocWarnings(
 export function DocResultsPane({
   rows,
   flagCount,
+  filteredCount = 0,
   isUpdating = false,
   fieldConfidence,
   validationWarnings,
@@ -59,6 +61,11 @@ export function DocResultsPane({
         <span className="inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-[11px] font-medium">
           {flagCount} flagged
         </span>
+        {filteredCount > 0 && (
+          <span className="inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+            {filteredCount} filtered by rules
+          </span>
+        )}
       </div>
 
       {allWarnings.length > 0 && (
