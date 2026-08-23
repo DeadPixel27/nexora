@@ -8,7 +8,7 @@
 | **Stack** | Next.js (App Router) ↔ FastAPI ↔ Groq (plan/refine) + OpenAI GPT-4o (extract) + RapidOCR/Tesseract ↔ Supabase Postgres + Storage |
 | **Repos** | [`backend/`](../backend/), [`frontend/`](../frontend/) |
 | **Related** | Product/API detail: [SPEC.md](./SPEC.md) · Engineering rules: [ENGINEERING-PRINCIPLES.md](./ENGINEERING-PRINCIPLES.md) · Next work: [NEXT-STEPS.md](./NEXT-STEPS.md) |
-| **Last updated** | 2026-08-16 |
+| **Last updated** | 2026-08-23 |
 
 ---
 
@@ -33,7 +33,7 @@
 
 ## 1. Elevator pitch & mental model
 
-**What it does:** A user uploads PDFs/images (invoices, receipts, resumes, etc.), picks a **template** or writes a plain-English **task**. The backend **plans** a short agent pipeline (OCR/text → LLM field extract → rules → format), **runs** it asynchronously, and the UI **polls** until structured rows appear. The user can **refine** extraction in chat (creates a versioned child run), **save as a workflow** for reuse, and optionally deliver via **email** or **Google Sheets**. **Inbound email** (Mailgun → workflow address) exists in the API but launch UI gates it behind the Pro waitlist.
+**What it does:** A user uploads PDFs/images (invoices, receipts, resumes, etc.), picks a **template** or writes a plain-English **task**. The backend **plans** a short agent pipeline (OCR/text → LLM field extract → **deterministic normalize** → rules → format), **runs** it asynchronously, and the UI **polls** until structured rows appear. The user can **refine** extraction in chat (creates a versioned child run), **save as a workflow** for reuse, and optionally deliver via **email** or **Google Sheets**. **Inbound email** (Mailgun → workflow address) exists in the API but launch UI gates it behind the Pro waitlist.
 
 **One-line architecture:**
 
@@ -146,10 +146,11 @@ sequenceDiagram
   API-->>FE: run_id
   API->>Run: BackgroundTasks execute_run
   loop Each planned step
+    Note over Run,Ext: Typical order: OCR/text → field_extractor → normalize → rules → formatter
     Run->>Ext: field_extractor when needed
     Run->>DB: workflow_step_runs progress
   end
-  Run->>DB: status completed + result JSON
+  Run->>DB: status completed + result JSON (rows, flags, filtered_count, warnings)
   loop Every 1.5s
     FE->>API: GET /api/runs/id
     API-->>FE: status + rows
@@ -163,13 +164,13 @@ sequenceDiagram
 | Sign-in | `POST /api/auth/google` or `/api/auth/session` | `auth.py`, `google_tokens.py`, `jwt.py` | Returns `{ user, token, is_new_user, auth_provider }` |
 | Upload | `POST /api/upload` | `UploadService.process_upload_batch` | Text/OCR at **upload** time; max 10 files; `MAX_PAGES_PER_FILE`; registry row in `uploads` |
 | Doc media | `POST .../documents/{id}/access` then `GET ...?doc_token=` | `jwt.create_document_access_token` | Short-lived capability token for `<img>`/`<iframe>` |
-| Plan | inside adhoc / `POST /api/pipeline/create` | `planner.create_plan` | Groq + agent catalog |
-| Template plan | `/api/runs/template` | `TemplateService.build_plan` | Code templates in `app/templates/` |
+| Plan | inside adhoc / `POST /api/pipeline/create` | `planner.create_plan` | Groq + agent catalog; after extract always insert **normalize** before rules/formatter |
+| Template plan | `/api/runs/template` | `template_planner.create_plan_from_template` | Code templates; always inserts `transform.normalize` between extract and rules |
 | Start run | `/api/runs/*` | `start_run` + `BackgroundTasks` | Check pages → start → **reserve** pages; refund on fail |
 | Execute | background | `runner.execute_run` | Handlers via `get_handler`; `ctx.data` carries `user_id`/`run_id` for outbound agents |
 | Poll | `GET /api/runs/{id}` | ownership check | Frontend `useRunPolling` @ **1500ms** |
 | Refine plan | `POST .../refine/plan` | `refine_chat.plan_refinement` | Cap check → clarify; `in_scope=false` refuses; ready → page charge then GPT-4o preview |
-| Refine apply | `POST .../refine` | `RefineService.refine_and_start` | Cap + **page reserve before** Groq; child run + `parent_run_id` |
+| Refine apply | `POST .../refine` | `RefineService.refine_and_start` | Cap + **page reserve before** Groq; child run + `parent_run_id`; format fixes prefer normalize; ADD RULE supports flag/filter/set |
 | Save workflow | `POST /api/workflows/from-run/...` | WorkflowService | Copies plan for reuse |
 
 ### 3.3 Pending-run resume (unsigned → signed)
@@ -249,14 +250,24 @@ Bootstrap: `import app.agents.handlers` in `main.py` lifespan registers all hand
 | `processor.text_extract` | `handlers/processors/text_extract.py` | Digital PDF text (PyMuPDF / Docling) | No |
 | `processor.ocr` | `handlers/processors/ocr.py` | Scanned PDF/images (RapidOCR default) | No |
 | `transform.field_extractor` | `handlers/transforms/field_extractor.py` | Structured fields via OpenAI | **Yes** |
-| `transform.normalize` | `handlers/transforms/normalize.py` | Deterministic date/amount/currency cleanup | No |
-| `transform.rules` | `handlers/transforms/rules.py` | Flag / filter / set on rows | No |
+| `transform.normalize` | `handlers/transforms/normalize.py` | Deterministic date/amount/currency/phone cleanup (`normalize_values.py`) | No |
+| `transform.rules` | `handlers/transforms/rules.py` | Row actions: **flag** (default), **filter**, **set**; ops gt/contains/exists/… | No |
 | `transform.pipeline_refiner` | `handlers/transforms/pipeline_refiner.py` | Refine-time plan/prompt rewrite (Groq) | **Yes** |
-| `output.formatter` | `handlers/output/formatter.py` | Shape CSV/JSON/table | No |
+| `output.formatter` | `handlers/output/formatter.py` | Shape CSV/JSON/table; includes `filtered_count` | No |
 | `output.email` | `handlers/output/email_agent.py` | In-pipeline Resend; **reserves** monthly email units | No (HTTP) |
 | `output.google_sheets` | `handlers/output/sheets_agent.py` | In-pipeline Sheets; **reserves** monthly Sheets units | No (HTTP) |
 
 Registry API: `register_agent`, `get_handler`, `get_agent_catalog` in `app/agents/core/registry.py`. Planner reads the catalog to choose steps.
+
+**Post-extract transforms (authoring paths):**
+
+| Path | Normalize | Rules |
+|------|-----------|-------|
+| Template | Always inserted after field_extractor | From template `rules` JSON (omit `action` → flag) |
+| Adhoc task | Planner instructed to insert after extract | Planner builds rules from natural language |
+| Refine chat | Refiner ensures normalize exists for format fixes | ADD RULE with `action: flag \| filter \| set` |
+
+Scalar row fields only — nested `transactions[]` rules are deferred ([SCALING-AND-JOBS.md](./SCALING-AND-JOBS.md)). Validators (`services/extraction/validators.py`) still **warn** without rewriting values; normalize is the rewrite step.
 
 ### App entry
 
@@ -270,7 +281,7 @@ Registry API: `register_agent`, `get_handler`, `get_agent_catalog` in `app/agent
 
 ## 5. Database — ER & table catalog
 
-**Source of truth:** [`backend/supabase/schema.sql`](../backend/supabase/schema.sql) for fresh installs + incremental [`backend/supabase/migrations/`](../backend/supabase/migrations/) (`001`–`015`) for existing DBs.
+**Source of truth:** [`backend/supabase/schema.sql`](../backend/supabase/schema.sql) for fresh installs + incremental [`backend/supabase/migrations/`](../backend/supabase/migrations/) (`001`–`016`) for existing DBs.
 
 **Footnote — schema drift:** column `workflow_runs.transient_refinement` exists in migration `006` but is not in `schema.sql`. Prefer migrations when upgrading a live project; sync `schema.sql` when convenient.
 
@@ -350,7 +361,7 @@ Soft links (`parent_template_id`, `template_id`) are **text**, not FKs — maste
 |---|---|
 | **Purpose** | One execution (adhoc or workflow-linked) |
 | **FK** | `workflow_id` → workflows SET NULL; `user_id` → users SET NULL (`011`); `parent_run_id` → self SET NULL |
-| **Notable** | `upload_id`, `document_ids`, `status`, `planned_steps`, `result`, `template_id`, `current_template_version_id`, `extraction_prompt`, `cached_documents`, `refine_summary`, `transient_refinement` (mig 006) |
+| **Notable** | `upload_id`, `document_ids`, `status`, `planned_steps`, `result` (rows, flags, `filtered_count`, confidence, validation_warnings), `template_id`, `current_template_version_id`, `extraction_prompt`, `cached_documents`, `refine_summary`, `transient_refinement` (mig 006) |
 | **Statuses** | typically `running` → `completed` \| `failed` |
 
 #### `workflow_step_runs`
@@ -844,6 +855,9 @@ frontend/src/app/
 | LLM routing OpenAI vs Groq | `backend/app/services/llm/router.py` |
 | OpenAI $ budget gate | `backend/app/services/llm/openai_cost.py` |
 | Field extraction | `backend/app/services/extraction/field_extractor.py` + agent handler |
+| Deterministic normalize | `backend/app/services/extraction/normalize_values.py` + `handlers/transforms/normalize.py` |
+| Rules (flag/filter/set) | `backend/app/agents/handlers/transforms/rules.py` |
+| Post-extract validators | `backend/app/services/extraction/validators.py` |
 | Page + outbound metering | `backend/app/services/usage/metering.py` |
 | HTTP usage helpers | `backend/app/api/usage_http.py` |
 | Integrations status | `backend/app/api/routes/integrations.py` |
@@ -874,11 +888,14 @@ A: Mint `POST .../documents/{id}/access` with the session Bearer → short-lived
 **Q: Why both Groq and OpenAI?**  
 A: Extraction quality matters most for invoices/receipts → GPT-4o. Planning and refine chat are latency/cost sensitive → Groq. Router: `LLMTask.EXTRACTION` vs `PLANNER` / `REFINER` / `PLAN_MODE`.
 
+**Q: Why a normalize agent if the LLM already “normalizes” in the prompt?**  
+A: Prompt rules are a soft first pass. `transform.normalize` is **deterministic** code (dates → `YYYY-MM-DD`, amounts strip `$`/₹/EU/IN separators, currency → ISO). Templates and adhoc plans insert it after extract; refine prefers ensuring that step exists for format fixes instead of only stuffing the extraction prompt. Rules then compare clean scalars (`flag` / `filter` / `set`).
+
 **Q: Why extract text at upload, not only at run?**  
 A: Upload path materializes text once; planner/runner reuse cached document text (`cached_documents` on refine). Faster iterations and fewer OCR passes.
 
 **Q: What happens on refine?**  
-A: Plan Mode clarifies (`in_scope` gate) → optional GPT-4o preview (pages charged first) → Apply reserves pages, runs Groq `pipeline_refiner`, starts **child** `workflow_runs` with `parent_run_id` + version blob. Original run immutable. Cap: `MAX_REFINES_PER_RUN` on both plan and apply.
+A: Plan Mode clarifies (`in_scope` gate) → optional GPT-4o preview (pages charged first) → Apply reserves pages, runs Groq `pipeline_refiner`, starts **child** `workflow_runs` with `parent_run_id` + version blob. Original run immutable. Cap: `MAX_REFINES_PER_RUN` on both plan and apply. Format/amount cleanup → ensure `transform.normalize`; new conditions → rules with `action`.
 
 **Q: How do you stop free-tier abuse?**  
 A: No anonymous runs (JWT before upload). Monthly page meter, email/Sheets outbound meters, refine cap, global daily page cap, OpenAI daily $ estimate, per-file page limit, slowapi per-user rate limits, refunds on failed runs/previews. UI: hard 429 → `UsageLimitModal`.
