@@ -119,7 +119,12 @@ async def test_create_plan_from_template_includes_extractor_config(monkeypatch):
     )
     assert extractor.config["fields"] == INVOICE_TEMPLATE.fields
     assert extractor.config["instructions"] == INVOICE_TEMPLATE.extraction_instructions
+    normalize = next(
+        step for step in plan.steps if step.agent_type == "transform.normalize"
+    )
+    assert normalize.step_order == extractor.step_order + 1
     rules_step = next(
         step for step in plan.steps if step.agent_type == "transform.rules"
     )
     assert rules_step.config["rules"] == INVOICE_TEMPLATE.rules
+    assert rules_step.step_order == normalize.step_order + 1

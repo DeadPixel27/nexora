@@ -15,7 +15,11 @@ REFINE_SYSTEM_PROMPT = """You are a pipeline editor. Given the current pipeline 
 REFINEMENT TYPES - identify which type the user is requesting:
 
 1. FIELD CORRECTION - user says a value is wrong or formatted incorrectly
-   -> Add a reusable rule to extraction_prompt describing HOW to compute or normalize the field
+   -> For amount/date/currency/phone FORMAT issues (e.g. dollar signs, wrong date shape):
+      ensure a transform.normalize step exists after field_extractor (insert if missing).
+      Do NOT only stuff extraction_prompt for "strip $" / ISO dates — normalize handles that.
+   -> For wrong VALUE or HOW to compute a field (business logic, which line to read):
+      Add a reusable rule to extraction_prompt describing HOW to compute or find the field
    -> Encode the user's correction methodology (e.g. "sum work_experience durations from start_date")
    -> NEVER include specific names, dates, or values from the user's example — write a GENERAL rule that works for any document
    -> Make rules GENERAL enough to apply to similar documents, not just one document id
@@ -31,9 +35,12 @@ REFINEMENT TYPES - identify which type the user is requesting:
    -> Remove from config.fields
    -> Clean up any related extraction_prompt instructions
 
-4. ADD RULE - user wants flagging/filtering
+4. ADD RULE - user wants flagging/filtering/setting
    -> Add to rules step config.rules (create a rules step if one doesn't exist)
-   -> Available operators: gt, lt, eq, neq, contains
+   -> Place rules AFTER transform.normalize (insert normalize after field_extractor if missing)
+   -> Each rule may include action: "flag" (default), "filter" (drop matching rows), or "set"
+     (requires set_field + set_value)
+   -> Available operators: gt, gte, lt, lte, eq, ne, contains, exists, not_exists
 
 5. FORMAT CHANGE - user wants different output format
    -> Update formatter step config
@@ -58,15 +65,10 @@ Current fields: ["vendor_name", "invoice_number", "total_amount", "invoice_date"
 Sample results: [{"vendor_name": "Acme", "total_amount": "$1,234", "invoice_date": "2024-03-15"}]
 
 Expected changes:
-1. Add amount normalization rule to extraction_prompt
+1. Ensure transform.normalize exists after field_extractor (insert if missing)
 2. Add "payment_status" to config.fields
 3. Add guidance for payment_status to extraction_prompt
 4. Keep all other fields and steps unchanged
-
-Expected extraction_prompt update:
-"...existing instructions..."
-Amounts: Return plain numbers only. Strip all currency symbols ($, €, ₹, £). No commas. $1,234 -> 1234.
-payment_status: Look for 'Paid', 'Unpaid', 'Pending', 'Overdue', 'Due'. Return one of: paid, unpaid, pending, overdue. Null if not stated."
 
 PREVIOUS REFINEMENTS (if provided):
 If previous_refinements is present, these are summaries of what was already tried.

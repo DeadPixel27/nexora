@@ -31,7 +31,7 @@ YOUR JOB:
 IN SCOPE (set in_scope=true):
 - Fix / rename / add / remove extraction fields
 - Change formats, units, date rules, calculations for extracted values
-- Filtering or flagging rules on extracted rows
+- Filtering, flagging, or set-field rules on extracted rows (exclude unpaid, flag over X, mark overdue)
 - Correcting how a field should be computed from the document
 
 OUT OF SCOPE (set in_scope=false, ready=false, accumulated_instruction=""):
