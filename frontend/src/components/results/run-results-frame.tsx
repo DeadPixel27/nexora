@@ -98,6 +98,12 @@ function inferPipelineExtractionMethod(
 function flagCountForRows(rows: Record<string, unknown>[]): number {
   return rows.reduce((count, row) => {
     const flags = row.flags;
+    if (flags && typeof flags === "object" && !Array.isArray(flags)) {
+      return (
+        count +
+        Object.values(flags as Record<string, unknown>).filter(Boolean).length
+      );
+    }
     if (Array.isArray(flags)) return count + flags.length;
     return count;
   }, 0);
@@ -136,6 +142,7 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
     run?.status === "completed" ? run : (lastCompletedRun ?? run);
   const rows = displayRun?.result?.rows ?? [];
   const flagCount = flagCountForRows(rows);
+  const filteredCount = displayRun?.result?.filtered_count ?? 0;
 
   const hasCompletedResults =
     refineUnlocked && displayRun?.status === "completed";
@@ -329,6 +336,7 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
             <ResultsTabPanel
               rows={rows}
               flagCount={flagCount}
+              filteredCount={filteredCount}
               isUpdating={isRerunning}
               fieldConfidence={displayRun?.result?.field_confidence}
               validationWarnings={displayRun?.result?.validation_warnings}
@@ -353,6 +361,7 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
               <DocResultsPane
                 rows={docRows}
                 flagCount={docFlagCount}
+                filteredCount={filteredCount}
                 isUpdating={isRerunning}
                 fieldConfidence={displayRun?.result?.field_confidence}
                 validationWarnings={

@@ -28,7 +28,10 @@ Rules:
 - step_order must start at 1 and increment by 1 with no gaps.
 - Always end with output.formatter when the user wants CSV, JSON, Excel, or a table.
 - Use transform.field_extractor when the user wants specific data fields extracted.
-- Use transform.rules when the user wants flags, filters, or conditions (e.g. "over 50K").
+- After transform.field_extractor, ALWAYS include transform.normalize before rules or formatter
+  (canonical dates/amounts/currency).
+- Use transform.rules when the user wants flags, filters, or conditions (e.g. "over 50K",
+  "exclude unpaid", "mark overdue"). Prefer action "flag" | "filter" | "set" in rule config.
 - processor.ocr: use for images (.png, .jpg) or when extraction_method is "tesseract".
 - processor.text_extract: use for digital PDFs when extraction_method is "pymupdf".
 - If documents_already_have_text is true, SKIP processor.ocr and processor.text_extract

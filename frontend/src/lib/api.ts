@@ -154,6 +154,7 @@ export interface RunResult {
   content?: string;
   rows?: Record<string, unknown>[];
   row_count?: number;
+  filtered_count?: number;
   field_confidence?: Record<string, FieldConfidence>;
   validation_warnings?: Record<string, ValidationWarning[]>;
 }
