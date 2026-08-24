@@ -32,6 +32,9 @@ class WorkerSettings:
     # Long OCR + LLM runs; allow up to 30 minutes per job.
     job_timeout = 1800
     max_jobs = 1
+    # Default poll is 0.5s — blows Upstash free 500k cmds/month in ~2 days idle.
+    poll_delay = 7
+    health_check_interval = 60
     # Evaluated at import — REDIS_URL must be set in the worker process env.
     redis_settings = (
         RedisSettings.from_dsn(settings.redis_url.strip())

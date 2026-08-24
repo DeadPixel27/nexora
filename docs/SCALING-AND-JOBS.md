@@ -29,7 +29,7 @@ If the **API** process dies (redeploy), workers keep going. If a run is stuck `r
 |--------|-----|
 | **Redis + Arq job queue** | Restart-safe extractions; CV/production shape. **Not Kafka** — see below |
 | **1 API + 1 worker** on Railway | Cheap CV default (~$5–10/mo); scale workers for Reddit |
-| **Upstash Redis** (free tier) | Queue only — stores `run_id`, not documents |
+| **Upstash Redis** (free tier) | Queue only — stores `run_id`. Worker polls every **7s** (`poll_delay`) to stay under 500K cmds/month |
 | **No Redis application cache** | Metering/rate limits stay in-process until multi-replica API |
 | **Orphan reclaim** | Queue on → `reclaim_stale_running` on API startup; queue off → `reclaim_all_running` |
 | **No extraction parallelism yet** | Batch LLM call is simpler/cheaper |
@@ -75,7 +75,7 @@ Same *idea* (API hands work to another process), different *tool*. Redis + Arq i
 | | Redis + Arq (shipped) | Kafka now |
 |---|---|---|
 | **Current behavior** | Enqueue `run_id`; worker runs `execute_run`. Upstash stores the job, not documents. | Topics + consumer groups + offsets; still call `execute_run` after consume. |
-| **Cost (this stage)** | **$0/mo** Upstash free (500K commands). ~15 commands per job; 10k runs/mo still free. Paid floor ~$10/mo if you outgrow free. | Managed Kafka typically **~$50–300/mo** at tiny volume (Confluent Basic / Aiven / MSK). Dedicated starts higher. Upstash Kafka **discontinued** (Mar 2025) — no same-vendor swap. |
+| **Cost (this stage)** | **$0/mo** Upstash free (500K commands). Idle poll is the bulk of usage, not jobs. `poll_delay=7` + `health_check_interval=60` so one 24/7 worker stays under free. Default 0.5s poll would blow 500K in ~2 days. | Managed Kafka typically **~$50–300/mo** at tiny volume (Confluent Basic / Aiven / MSK). Dedicated starts higher. Upstash Kafka **discontinued** (Mar 2025) — no same-vendor swap. |
 
 - **Why deferred:** Scaling is worker replicas, then shared OpenAI metering, then chunked extract — not “Redis → Kafka.” Kafka would not avoid recoding: a transport swap is `enqueue.py` + `worker.py` (~80 lines, 1–2 days), not the app. Extra ops (partitions, offsets, monitoring) with no product win.
 - **Trigger to build:** Independent consumers of the *same* stream (billing + webhooks + search + analytics), **months of event replay** after a bug, or millions of msgs/day with long retention.
