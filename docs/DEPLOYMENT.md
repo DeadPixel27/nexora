@@ -2,7 +2,7 @@
 
 How we run production: hosts, where env vars live, and the ship checklist.
 
-**Status:** Deploy is planned but not live yet. See [NEXT-STEPS.md](./NEXT-STEPS.md).
+**Status:** Live on Railway + Vercel (2026-08-24). API: `https://nexora-api-production-065e.up.railway.app`. Mailgun inbound is **code-ready, ops skipped** until we own a receiving domain. Next: real-doc testing + launch kit — [NEXT-STEPS.md](./NEXT-STEPS.md).
 
 ---
 
@@ -18,7 +18,7 @@ User → Vercel (Next.js frontend)
          ├── Supabase (Postgres + private Storage)
          ├── OpenAI / Groq (LLMs)
          ├── Resend (outbound email)      [optional]
-         └── Mailgun (inbound webhooks)   [optional]
+         └── Mailgun (inbound webhooks)   [code ready; skip until you own a domain]
 ```
 
 | Layer | Host | Role |
@@ -97,7 +97,7 @@ Optional / feature flags:
 |----------|------|
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Outbound email delivery |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Sheets export — users must share each spreadsheet with the JSON `client_email` as Editor (shown in Workflow Settings via `GET /api/integrations`) |
-| `INBOUND_EMAIL_DOMAIN` / `INBOUND_WEBHOOK_SECRET` | Mailgun inbound — empty secret **rejects** all webhooks |
+| `INBOUND_EMAIL_DOMAIN` / `INBOUND_WEBHOOK_SECRET` | Mailgun inbound — empty secret **rejects** all webhooks. Needs MX on a domain you control; Railway URL is webhook only. |
 | `ADMIN_API_KEY` | Admin header routes |
 | Rate limits / page caps | Defaults in `.env.example` are fine to start |
 
@@ -116,22 +116,31 @@ When you cut over:
 3. **Railway** — services **nexora-api** and **nexora-worker**; **Upstash** Redis database name can be `nexora-jobs`.
 4. **Vercel** — project **nexora**.
 5. **Resend** — new API key + verified sending domain (`RESEND_API_KEY` / `RESEND_FROM_EMAIL`).
-6. **Mailgun (inbound)** — skip until you have a domain; see [Mailgun inbound setup](#mailgun-inbound-setup-one-catch-all-route) below.
+6. **Mailgun (inbound)** — skip until you own a domain you can add MX/TXT on. A Railway `*.up.railway.app` host **cannot** receive email. See [Mailgun inbound setup](#mailgun-inbound-setup-one-catch-all-route) below.
 7. Smoke: `/api/health`, `/api/integrations` (Sheets share email + `inbound_configured`), Google sign-in, one email send, one Sheets push.
 
 GitHub: public repo should be **nexora** (see SPEC). Rename on GitHub if the remote is still `agentflow`.
 
 ### Mailgun inbound setup (one catch-all route)
 
+**Skipped for this CV deploy.** Do this later if you buy a domain.
+
 All workflows share **one** Mailgun inbound route. Nexora routes by recipient local-part (`flow-…`) in `inbound_addresses`.
 
-1. Create a Mailgun account (Free includes **1 inbound route** — enough for launch).
-2. Add a **receiving** domain (e.g. `ingest.nexora.app`) and complete DNS (MX + TXT as Mailgun shows).
+You need **two** names:
+
+| Role | Example | Notes |
+|------|---------|--------|
+| Inbox domain | `ingest.yourdomain.com` | You add Mailgun’s MX + TXT here. Not `*.up.railway.app`. |
+| Webhook URL | `https://nexora-api-production-065e.up.railway.app/api/inbound/email` | Where Mailgun POSTs after receiving mail. |
+
+1. Create a Mailgun account (Free includes **1 inbound route** — enough).
+2. Add a **receiving** domain (e.g. `ingest.yourdomain.com`) and complete DNS (MX + TXT as Mailgun shows).
 3. In **Receiving → Routes**, add a single catch-all:
-   - **Expression:** `match_recipient(".*@ingest.nexora.app")` (use your real domain)
-   - **Action:** forward / store-and-notify to `https://<your-api-host>/api/inbound/email` (Mailgun “store and notify” / webhook POST)
+   - **Expression:** `match_recipient(".*@ingest.yourdomain.com")`
+   - **Action:** store-and-notify to `https://nexora-api-production-065e.up.railway.app/api/inbound/email`
 4. Copy the domain’s **HTTP webhook signing key** into Railway as `INBOUND_WEBHOOK_SECRET`.
-5. Set `INBOUND_EMAIL_DOMAIN=ingest.nexora.app` (same domain as above).
+5. Set `INBOUND_EMAIL_DOMAIN` to the same ingest domain.
 6. Confirm `GET /api/integrations` returns `inbound_configured: true`. Create an address in Workflow Settings and email a small PDF to it.
 
 You do **not** need one Mailgun route per user or workflow.
@@ -233,7 +242,7 @@ Guide: [SUPABASE_SETUP.md](./SUPABASE_SETUP.md).
 3. Upload → adhoc or template run → poll until complete (**check worker logs** for `Worker picked up`).
 4. Second user cannot `GET` that run → **403**.
 5. Hit a rate/usage limit path if configured → **429** / clear UI copy.
-6. Optional: email / Sheets / inbound webhook with secrets set.
+6. Optional: email / Sheets. Inbound webhook stays off until Mailgun + domain.
 
 ---
 

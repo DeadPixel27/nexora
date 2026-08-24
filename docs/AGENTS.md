@@ -15,7 +15,7 @@
 | `transform.rules` | Transform | Flag / filter / set on rows (gt, contains, exists, …) | No |
 | `output.formatter` | Output | Rows → CSV or JSON | No |
 
-**These cover most document extraction use cases. Enough for launch.**
+**These cover most document extraction use cases. Enough for launch.** Outbound email/Sheets are agents (`output.email`, `output.google_sheets`) plus HTTP routes. Inbound email is a **channel** (Mailgun webhook), not an agent — ops skipped until we own a domain. WhatsApp inbound is deferred — [NEXT-STEPS.md](./NEXT-STEPS.md).
 
 ---
 

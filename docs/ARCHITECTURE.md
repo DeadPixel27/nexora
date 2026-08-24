@@ -8,7 +8,7 @@
 | **Stack** | Next.js (App Router) ↔ FastAPI ↔ Groq (plan/refine) + OpenAI GPT-4o (extract) + RapidOCR/Tesseract ↔ Supabase Postgres + Storage |
 | **Repos** | [`backend/`](../backend/), [`frontend/`](../frontend/) |
 | **Related** | Product/API detail: [SPEC.md](./SPEC.md) · Engineering rules: [ENGINEERING-PRINCIPLES.md](./ENGINEERING-PRINCIPLES.md) · Next work: [NEXT-STEPS.md](./NEXT-STEPS.md) |
-| **Last updated** | 2026-08-23 |
+| **Last updated** | 2026-08-24 |
 
 ---
 
@@ -33,7 +33,7 @@
 
 ## 1. Elevator pitch & mental model
 
-**What it does:** A user uploads PDFs/images (invoices, receipts, resumes, etc.), picks a **template** or writes a plain-English **task**. The backend **plans** a short agent pipeline (OCR/text → LLM field extract → **deterministic normalize** → rules → format), **runs** it asynchronously, and the UI **polls** until structured rows appear. The user can **refine** extraction in chat (creates a versioned child run), **save as a workflow** for reuse, and optionally deliver via **email** or **Google Sheets**. **Inbound email** (Mailgun → `flow-…@` workflow address) is available in Workflow Settings.
+**What it does:** A user uploads PDFs/images (invoices, receipts, resumes, etc.), picks a **template** or writes a plain-English **task**. The backend **plans** a short agent pipeline (OCR/text → LLM field extract → **deterministic normalize** → rules → format), **runs** it asynchronously, and the UI **polls** until structured rows appear. The user can **refine** extraction in chat (creates a versioned child run), **save as a workflow** for reuse, and optionally deliver via **email** or **Google Sheets**. **Inbound email** (Mailgun → `flow-…@` workflow address) is **built** (HMAC webhook + Workflow Settings UI) but **ops-off** on the CV deploy until we own a receiving domain.
 
 **One-line architecture:**
 
@@ -701,11 +701,12 @@ Code: `metering.py`, `usage_http.py`, `openai_cost.py`. Frontend: `UsageLimitMod
 
 ### Inbound email (Mailgun)
 
-- `INBOUND_EMAIL_DOMAIN` (e.g. `ingest.nexora.app`)
+- `INBOUND_EMAIL_DOMAIN` (e.g. `ingest.yourdomain.com`)
 - `INBOUND_WEBHOOK_SECRET` — HMAC verify; empty secret rejects webhooks
 - **Product:** Workflow Settings create / copy / delete one `flow-…@` address per workflow. Sidebar shows address or “Configure in settings”.
-- **Ops:** One Mailgun catch-all route → `POST /api/inbound/email` (see [DEPLOYMENT.md](./DEPLOYMENT.md#mailgun-inbound-setup-one-catch-all-route)). Create is idempotent per workflow.
-- **Backend:** CRUD `/api/inbound-addresses` + webhook (HMAC → attachments → metered workflow run).
+- **Ops (skipped for CV):** Needs MX/TXT on a **domain you control**. The Railway API URL is only the **webhook** Mailgun POSTs to (`https://nexora-api-production-065e.up.railway.app/api/inbound/email`). It cannot be the inbox (`flow-…@….up.railway.app` will not receive mail). See [DEPLOYMENT.md](./DEPLOYMENT.md#mailgun-inbound-setup-one-catch-all-route).
+- **Backend:** CRUD `/api/inbound-addresses` + webhook (HMAC → attachments → metered workflow run). Create is idempotent per workflow.
+- **Later channel:** WhatsApp inbound is not implemented — [NEXT-STEPS.md](./NEXT-STEPS.md).
 
 ### Waitlist
 
@@ -909,7 +910,7 @@ A: Health, integrations status, auth endpoints, waitlist, **template catalog**. 
 A: `PERSISTENCE_BACKEND=auto` uses Supabase when URL+secret set, else in-memory (tests/dev, data lost on restart). Same service code via repository protocols.
 
 **Q: How does inbound email work?**  
-A: User creates one `flow-…@INBOUND_EMAIL_DOMAIN` address per workflow in Settings. Mailgun catch-all posts to the HMAC webhook; Nexora stores attachments and starts the workflow as the owning user (metered). Receiving requires `INBOUND_WEBHOOK_SECRET` set.
+A: User creates one `flow-…@INBOUND_EMAIL_DOMAIN` address per workflow in Settings. Mailgun catch-all posts to the HMAC webhook; Nexora stores attachments and starts the workflow as the owning user (metered). Receiving requires `INBOUND_WEBHOOK_SECRET` **and** MX on a domain you own. Production today has `inbound_configured: false` (CV — no domain).
 
 **Q: Where do refined prompts live?**  
 A: Not only in Postgres. Metadata in `user_template_versions`; full payload in private `user-templates` storage under `storage_key`. Master templates stay in code.
@@ -937,12 +938,12 @@ flowchart LR
   Worker --> OpenAI
   Worker --> Groq
   Railway --> Resend
-  Mailgun --> Railway
+  Mailgun -.->|"optional; domain required"| Railway
 ```
 
 Checklist mindset: apply SQL migrations through **`016`** / `schema.sql`, create **private** Storage buckets (`documents`, `user-templates`), set all backend secrets on Railway (incl. `JWT_SECRET_KEY`, `REDIS_URL`, `GOOGLE_CLIENT_ID`, metering caps), deploy a **worker** service (`arq app.jobs.worker.WorkerSettings`), set `NEXT_PUBLIC_*` on Vercel, align `CORS_ORIGINS` + Google OAuth authorized origins for the production origin, keep `AUTH_ALLOW_EMAIL=false`, smoke Google sign-in → upload → run → cross-user 403 → 429 UI.
 
-See [NEXT-STEPS.md](./NEXT-STEPS.md) for current ship order. Deploy details: [DEPLOYMENT.md](./DEPLOYMENT.md).
+See [NEXT-STEPS.md](./NEXT-STEPS.md) for current ship order (real-doc testing + launch kit). Deploy details: [DEPLOYMENT.md](./DEPLOYMENT.md). Live API: `https://nexora-api-production-065e.up.railway.app`.
 
 ---
 

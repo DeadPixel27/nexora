@@ -17,8 +17,9 @@ Upload PDFs or images, describe the task in plain English, and get structured JS
 | Stage | Agent | `agent_type` |
 |-------|--------|----------------|
 | Process | Text Extractor | `processor.text_extract` |
-| Process | OCR (Tesseract) | `processor.ocr` |
+| Process | OCR (RapidOCR / Tesseract) | `processor.ocr` |
 | Transform | Field Extractor (LLM) | `transform.field_extractor` |
+| Transform | Normalize (dates/amounts) | `transform.normalize` |
 | Transform | Rules (flags/filters) | `transform.rules` |
 | Output | Formatter (CSV/JSON) | `output.formatter` |
 
@@ -30,6 +31,8 @@ Upload PDFs or images, describe the task in plain English, and get structured JS
 - **Persistence:** Supabase (Postgres + Storage)
 - **Frontend:** Next.js 14 + TypeScript + Tailwind + shadcn/ui
 - **Deploy:** Vercel (frontend) + Railway (API + worker) + Upstash Redis
+
+**Live API:** `https://nexora-api-production-065e.up.railway.app` (`GET /api/health`). Frontend is on Vercel (Google sign-in → upload → extract → email/Sheets). **Inbound email** (Mailgun) is implemented in code but **not turned on** — receiving mail needs a domain you control; a Railway hostname cannot be an inbox.
 
 ## Quick start
 
@@ -109,9 +112,13 @@ README.md    # This file
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `GROQ_API_KEY` | Yes | Groq API key for planner + extraction |
-| `SUPABASE_URL` | No | Postgres persistence |
-| `SUPABASE_SECRET_KEY` | No | Supabase service role key |
+| `GROQ_API_KEY` | Yes | Groq API key for planner + refine |
+| `OPENAI_API_KEY` | Yes (prod extract) | GPT-4o extraction |
+| `JWT_SECRET_KEY` | Yes (prod) | Session JWT |
+| `SUPABASE_URL` | No locally | Postgres persistence |
+| `SUPABASE_SECRET_KEY` | No locally | Supabase service role key |
+| `REDIS_URL` | Prod queue | Omit locally → in-process runs |
+| `INBOUND_WEBHOOK_SECRET` | Optional | Mailgun HMAC; empty **rejects** inbound |
 
 ## Contributing / Git workflow
 

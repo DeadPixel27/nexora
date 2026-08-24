@@ -31,6 +31,7 @@ If the **API** process dies (redeploy), workers keep going. If a run is stuck `r
 | **1 API + 1 worker** on Railway | Cheap CV default (~$5–10/mo); scale workers for Reddit |
 | **Upstash Redis** (free tier) | Queue only — stores `run_id`. Worker polls every **7s** (`poll_delay`) to stay under 500K cmds/month |
 | **No Redis application cache** | Metering/rate limits stay in-process until multi-replica API |
+| **Mailgun inbound ops** | Webhook + `inbound_addresses` shipped. Receiving mail deferred until we own a domain (CV). Replay tokens stay in-process until multi-replica API. WhatsApp inbound not built — [NEXT-STEPS.md](./NEXT-STEPS.md) |
 | **Orphan reclaim** | Queue on → `reclaim_stale_running` on API startup; queue off → `reclaim_all_running` |
 | **No extraction parallelism yet** | Batch LLM call is simpler/cheaper |
 | **Max 10 pages per file** | Single GPT-4o call; raise when chunked extract ships |

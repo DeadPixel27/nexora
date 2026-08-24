@@ -2,7 +2,7 @@
 
 **One-liner:** Describe what you want done with your documents -> system builds and runs an AI agent pipeline automatically.
 
-> **Progress snapshot:** Launch stack (V2/V3 + auth/metering) shipped on `develop`. Open work: [NEXT-STEPS.md](./NEXT-STEPS.md). System truth: [ARCHITECTURE.md](./ARCHITECTURE.md).
+> **Progress snapshot:** Launch stack live on Railway + Vercel (2026-08-24). Mailgun inbound ops skipped (no domain). Open work: real-doc testing + launch kit — [NEXT-STEPS.md](./NEXT-STEPS.md). System truth: [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 
 **Documentation:** All reference docs live in [`docs/`](./README.md).
@@ -40,7 +40,7 @@
 - [x] Push results to Google Sheets (`POST /api/runs/{id}/sheets`)
 - [x] Workflow settings: name, description, default email/Sheets URL (`PATCH /api/workflows/{id}/settings`)
 - [x] Update workflow from refined run (`PATCH /api/workflows/{id}`)
-- [x] Inbound email forwarding addresses + Mailgun webhook (`POST /api/inbound/email`)
+- [x] Inbound email forwarding addresses + Mailgun webhook (`POST /api/inbound/email`) — **ops skipped** until we own a receiving domain
 
 ### Available Agent Types
 
@@ -103,14 +103,14 @@ Step 5: Formatter (output: CSV with flag column)
 | **Database** | Supabase (Postgres) | Users, workflows, runs | ✅ Done (auto fallback to in-memory) |
 | **File storage** | Supabase Storage | Uploaded documents | ✅ Done (auto fallback to local disk) |
 | **Auth** | Email lookup (no password) | MVP session; future: Supabase Auth | ✅ Done |
-| **Deploy (frontend)** | Vercel | Free for personal projects | ❌ Not started |
-| **Deploy (backend)** | Railway | $5 free credit/month | ❌ Not started |
+| **Deploy (frontend)** | Vercel | Live | ✅ Done |
+| **Deploy (backend)** | Railway | Live API + worker | ✅ Done |
 | **Pre-deploy hardening** | CORS, rate limits, MIME, Dockerfile, etc. | Done | ✅ Done |
 | **Templates** | Code-defined presets + Supabase mirror | `backend/app/templates/` | ✅ Done |
 | **User template versions** | Supabase Storage `user-templates` + Postgres index | Workflow versions; refine does not create versions | ✅ Done |
 | **Email delivery** | Resend API | `output.email` agent + `POST /api/runs/{id}/email` | ✅ Done |
 | **Google Sheets** | Service account JSON | `output.google_sheets` agent + `POST /api/runs/{id}/sheets` | ✅ Done |
-| **Inbound email** | Mailgun webhook | Forward to `*@ingest.nexora.app` → auto-run workflow | ✅ Done |
+| **Inbound email** | Mailgun webhook | Code done (`POST /api/inbound/email`). Ops skipped until we own a domain | ✅ Code / ⬜ ops |
 | **Code** | GitHub (public repo) | Recruiters will see this | ✅ [DeadPixel27/nexora](https://github.com/DeadPixel27/nexora) |
 
 ---
@@ -317,8 +317,8 @@ RESEND_API_KEY=
 RESEND_FROM_EMAIL=onboarding@resend.dev
 GOOGLE_SERVICE_ACCOUNT_JSON=
 
-# V2 inbound email (optional)
-INBOUND_EMAIL_DOMAIN=ingest.nexora.app
+# V2 inbound email (optional — skip until you own a domain + Mailgun MX)
+INBOUND_EMAIL_DOMAIN=ingest.yourdomain.com
 INBOUND_WEBHOOK_SECRET=
 ```
 
@@ -375,14 +375,14 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 - [x] Code-defined templates (`backend/app/templates/`) + `POST /api/runs/template`
 - [x] Merged to `develop` and `main` (`800cc03`)
 
-### Week 4: Deploy + Demo ❌ (current focus)
+### Week 4: Deploy + Demo (current focus)
 
-- [ ] Deploy backend to Railway
-- [ ] Deploy frontend to Vercel
-- [ ] Set production env vars + `CORS_ORIGINS` (+ Resend / Sheets / inbound secrets)
-- [ ] End-to-end smoke test on live URLs
+- [x] Deploy backend to Railway (`nexora-api-production-065e.up.railway.app`)
+- [x] Deploy frontend to Vercel
+- [x] Set production env vars + `CORS_ORIGINS` (+ Resend / Sheets). Inbound secrets skipped (no domain)
+- [ ] End-to-end real-doc testing on live URLs
 - [ ] Record 60-sec demo video
-- [ ] Root README with screenshots + live demo link
+- [ ] Root README screenshots + live demo link
 - [ ] Add to LinkedIn / resume
 - [x] Merge `develop` → `main` for release (`800cc03`)
 
@@ -400,11 +400,11 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 
 ### V2 polish (optional, pre-deploy)
 
-- [ ] Inbound webhook: email results back to sender when run completes
+- [ ] Inbound webhook: email results back to sender when run completes (after Mailgun ops)
 - [x] Wire workflow settings page to `POST /api/inbound-addresses` (create / copy / delete; one address per workflow). Waitlist `source=inbound_email` kept for telemetry only.
 - [x] Sheets/email setup walkthrough in Workflow Settings + Sheets modal (`GET /api/integrations` exposes share-as-Editor email)
 - [x] Waitlist `source` telemetry: `normal` | `pages_exhausted` | `inbound_email`
-- [ ] Add `RESEND_API_KEY` / `GOOGLE_SERVICE_ACCOUNT_JSON` for live export testing
+- [x] Add `RESEND_API_KEY` / `GOOGLE_SERVICE_ACCOUNT_JSON` for live export testing
 
 ---
 
@@ -427,7 +427,7 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 | 9 | Add auth (Supabase Auth) | 3–4 hr | Security | ⬜ |
 | 10 | Add file content validation (`filetype`) | 30 min | Security | ✅ |
 
-**Total remaining to production-ready:** ~2–4 hours (deploy + optional auth/cleanup).
+**Total remaining to production-ready:** real-doc testing + launch kit. Deploy is live; Mailgun inbound ops deferred (no domain).
 
 ### Feature timeline (post-MVP)
 
@@ -441,8 +441,9 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 | V2.0 | Backend V2 delivery + inbound email | High | ✅ Done — [ARCHITECTURE.md](./ARCHITECTURE.md) |
 | V2.1 | Live PDF preview + field highlights | 6–10 hr | `docs/NEXT-STEPS.md` |
 | V2.1 | Auto-correct / learning from edits | Medium | `docs/NEXT-STEPS.md` |
-| V3.0 | Inbound reply-to-sender after run completes | Medium | partial — webhook runs workflow; no auto-reply yet |
+| V3.0 | Inbound reply-to-sender after run completes | Medium | partial — webhook runs workflow; no auto-reply yet; Mailgun ops skipped |
 | V3.0 | Watch folder / inbox automation | 12–20 hr | `docs/NEXT-STEPS.md` |
+| later | WhatsApp inbound | High | `docs/NEXT-STEPS.md` — after Mailgun |
 
 ### Phase A — Deploy (P0)
 
@@ -450,8 +451,8 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 |--------|------|-----|
 | [x] | CORS from env var | GAPS #3 (done) |
 | [x] | Backend Dockerfile | GAPS #9 (done) |
-| [ ] | Deploy backend (Railway) + env vars | `docs/NEXT-STEPS.md` |
-| [ ] | Deploy frontend (Vercel) + `NEXT_PUBLIC_API_URL` | `docs/NEXT-STEPS.md` |
+| [x] | Deploy backend (Railway) + env vars | `docs/NEXT-STEPS.md` |
+| [x] | Deploy frontend (Vercel) + `NEXT_PUBLIC_API_URL` | `docs/NEXT-STEPS.md` |
 | [ ] | Live smoke test (upload → template run → download) | `docs/NEXT-STEPS.md` |
 | [ ] | README screenshots + live demo URL | `docs/NEXT-STEPS.md` |
 | [ ] | 60-sec demo video | `docs/NEXT-STEPS.md` |

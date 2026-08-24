@@ -4,6 +4,8 @@ Step-by-step checklist to go from zero to a live production deploy. Work top to 
 
 **Time estimate:** ~2 h total, mostly waiting on dashboards.
 
+**Current deploy (2026-08-24):** API is live at `https://nexora-api-production-065e.up.railway.app`. Use this playbook to reproduce a stack. **Phase 9 (Mailgun) is skipped** for the CV project until we own a receiving domain.
+
 Related reference docs (do not need to read before starting):
 - [DEPLOYMENT.md](./DEPLOYMENT.md) — full env var reference + topology
 - [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) — Supabase troubleshooting
@@ -240,27 +242,31 @@ Run these in order. Stop and fix before continuing if anything fails.
 
 ---
 
-## Phase 9 — Mailgun inbound (skip until you have nexora.app DNS)
+## Phase 9 — Mailgun inbound (skip — needs a domain you own)
 
-> Skip this phase entirely at launch. Do it when you have the `nexora.app` domain configured.
+> Skip for launch / this CV demo. Railway `*.up.railway.app` is **HTTP only** — it cannot receive `flow-…@` mail. Do this when you buy a domain and can add MX + TXT.
+
+Webhook URL when you do it:
+
+`https://nexora-api-production-065e.up.railway.app/api/inbound/email`
 
 - [ ] Create Mailgun account **nexora** at [mailgun.com](https://mailgun.com)
-- [ ] **Sending** → **Domains** → **Add domain** → `ingest.nexora.app`
+- [ ] **Sending** → **Domains** → **Add domain** → `ingest.<your-domain>`
   - Complete DNS verification: add MX + TXT records Mailgun shows you
   - Wait for DNS propagation and Mailgun to verify
 - [ ] **Receiving** → **Routes** → **Create route**:
-  - Expression: `match_recipient(".*@ingest.nexora.app")`
-  - Action: **Store and notify** → URL: `https://<railway-api-url>/api/inbound/email`
+  - Expression: `match_recipient(".*@ingest.<your-domain>")`
+  - Action: **Store and notify** → URL: `https://nexora-api-production-065e.up.railway.app/api/inbound/email`
 - [ ] Copy the domain's **HTTP webhook signing key** from Mailgun domain settings
 - [ ] Add to Railway (both nexora-api and nexora-worker):
   ```env
-  INBOUND_EMAIL_DOMAIN=ingest.nexora.app
+  INBOUND_EMAIL_DOMAIN=ingest.<your-domain>
   INBOUND_WEBHOOK_SECRET=<signing key from Mailgun>
   ```
   Redeploy nexora-api.
 - [ ] Verify:
   ```bash
-  curl -H "Authorization: Bearer <jwt>" https://<railway-url>/api/integrations
+  curl https://nexora-api-production-065e.up.railway.app/api/integrations
   ```
   → `"inbound_configured": true`
 - [ ] Create an inbound address in Workflow Settings → send a small PDF as an email attachment to it → confirm run appears
@@ -291,14 +297,14 @@ Run these in order. Stop and fix before continuing if anything fails.
 | `RESEND_API_KEY` | from Phase 4 |
 | `RESEND_FROM_EMAIL` | `onboarding@resend.dev` |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | minified JSON from Phase 2 |
-| `INBOUND_EMAIL_DOMAIN` | `ingest.nexora.app` (Phase 9 only) |
-| `INBOUND_WEBHOOK_SECRET` | from Mailgun (Phase 9 only) |
+| `INBOUND_EMAIL_DOMAIN` | skip until you own a domain |
+| `INBOUND_WEBHOOK_SECRET` | skip until Mailgun |
 
 ### Vercel (nexora frontend)
 
 | Variable | Value |
 |----------|-------|
-| `NEXT_PUBLIC_API_URL` | Railway API URL |
+| `NEXT_PUBLIC_API_URL` | `https://nexora-api-production-065e.up.railway.app` |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | from Phase 2 |
 | `NEXT_PUBLIC_AUTH_ALLOW_EMAIL` | `false` |
 | `NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB` | `10` |

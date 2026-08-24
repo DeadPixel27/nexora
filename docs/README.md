@@ -1,6 +1,8 @@
 # Nexora — Documentation
 
-All reference docs live here. Updated Aug 11, 2026.
+All reference docs live here. Updated Aug 24, 2026.
+
+**Current focus:** real-doc testing + launch kit. Stack is live (Railway + Vercel). Mailgun inbound ops skipped until we own a receiving domain.
 
 > **AI assistants:** Read [ENGINEERING-PRINCIPLES.md](./ENGINEERING-PRINCIPLES.md) before coding. Ship order: [NEXT-STEPS.md](./NEXT-STEPS.md).
 

@@ -1,9 +1,9 @@
 # Nexora — Next Steps
 
-**Updated:** 2026-08-16  
-**Branch:** `feature/hard-usage-caps` → merge to `develop`
+**Updated:** 2026-08-24  
+**Branch:** `develop`
 
-Launch product (V2/V3 + auth/metering) is built. Remaining work below.
+Launch product (V2/V3 + auth/metering) is built. Stack is live on Railway + Vercel. Remaining work below.
 
 ---
 
@@ -12,16 +12,18 @@ Launch product (V2/V3 + auth/metering) is built. Remaining work below.
 | # | Task | Est. | Notes |
 |---|------|------|-------|
 | 1 | ~~**Hard usage caps per feature**~~ | done | Pages/extract, refine (cap + out-of-scope refuse), email/Sheets HTTP + agents; clear 429 modal; account shows outbound bars. |
-| 2 | **Deploy** | ~4h | Supabase + Upstash Redis + Railway API + Worker + Vercel + smoke. See [DEPLOYMENT.md](./DEPLOYMENT.md) + [SCALING-AND-JOBS.md](./SCALING-AND-JOBS.md). |
+| 2 | ~~**Deploy**~~ | done | Supabase + Upstash Redis + Railway API + Worker + Vercel. API: `https://nexora-api-production-065e.up.railway.app`. Mailgun inbound **skipped** (needs a domain you control — Railway `*.up.railway.app` is HTTP only). See [DEPLOYMENT.md](./DEPLOYMENT.md). |
 | 3 | **Real-doc testing** | ~3h | 3–5 docs each: invoice, receipt, resume. Score accuracy before extra hardening. |
-| 4 | **Launch kit** | ~2h | 60s Loom + Reddit / IH / HN drafts + README screenshots + live URL. |
+| 4 | **Launch kit** | ~2h | 60s Loom + Reddit / IH / HN drafts + README screenshots + live Vercel URL. |
 
 ---
 
 ## Deferred (post-launch)
 
+- **Mailgun inbound ops** — webhook code is shipped (`POST /api/inbound/email`). Receiving mail needs MX/TXT on a domain you own (e.g. `ingest.yourdomain.com`). Empty `INBOUND_WEBHOOK_SECRET` rejects all inbound. Skip for this CV deploy.
 - SEO template pages (`/templates/[slug]`)
 - Inbound email IMAP poll (unread + attachments → batched run)
+- **WhatsApp inbound** — after Mailgun is live. Mirror Mailgun: Meta Cloud API (or Twilio) webhook → download media → `save_document_bytes` → `start_workflow_run`. Needs phone↔workflow routing + Meta Business verification. Receiving user docs is ~$0; service replies free until 2026-10-01, then utility rates.
 - Job queue / Redis / multi-replica — **queue shipped** (Arq + Upstash); scale worker replicas for Reddit. Multi-replica API still deferred — [SCALING-AND-JOBS.md](./SCALING-AND-JOBS.md)
 - GitHub Actions CI (`pytest` + `npm run build`)
 - Frontend tests (Vitest)
@@ -84,4 +86,4 @@ Until this exists, keep files and results for MVP (history + user refine). No 24
 
 ## Immediate next action
 
-**Deploy** (#2), then real-doc testing + launch kit.
+**Real-doc testing** (#3), then launch kit (#4). Do not buy a domain or wire Mailgun for this CV demo.
