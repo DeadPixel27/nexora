@@ -4,13 +4,14 @@ Workflows Route — save, list, and run reusable workflow templates.
 
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.api.dependencies import CurrentUserDep, RepoDep, WorkflowServiceDep
 from app.api.ownership import get_owned_upload, require_self, require_workflow_owner
 from app.api.mappers.planned_step import to_planned_steps
 from app.api.mappers.run import to_run_response
 from app.config import settings
+from app.jobs import schedule_run
 from app.models.api.runs import RunResponse
 from app.rate_limit import limiter
 from app.models.api.workflows import (
@@ -24,7 +25,6 @@ from app.models.api.workflows import (
     WorkflowUpdateFromRunRequest,
 )
 from app.services.documents.upload_loader import UploadNotFoundError
-from app.services.pipeline.runner import execute_run
 from app.services.users.user_service import UserNotFoundError
 from app.services.workflows.workflow_service import RunNotFoundError, WorkflowNotFoundError
 
@@ -197,7 +197,6 @@ async def run_saved_workflow(
     request: Request,
     workflow_id: str,
     body: WorkflowRunRequest,
-    background_tasks: BackgroundTasks,
     workflows: WorkflowServiceDep,
     repo: RepoDep,
     current_user: CurrentUserDep,
@@ -233,7 +232,7 @@ async def run_saved_workflow(
         page_count=page_count,
         template_id=getattr(run, "template_id", None),
     )
-    background_tasks.add_task(execute_run, run.run_id)
+    await schedule_run(run.run_id)
     return to_run_response(run)
 
 

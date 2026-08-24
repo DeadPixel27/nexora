@@ -14,6 +14,7 @@ def test_integrations_unconfigured(monkeypatch):
     monkeypatch.setattr(settings, "resend_api_key", "")
     monkeypatch.setattr(settings, "google_service_account_json", "")
     monkeypatch.setattr(settings, "inbound_email_domain", "ingest.example.com")
+    monkeypatch.setattr(settings, "inbound_webhook_secret", "")
 
     response = client.get("/api/integrations")
     assert response.status_code == 200
@@ -21,6 +22,18 @@ def test_integrations_unconfigured(monkeypatch):
     assert body["email_configured"] is False
     assert body["sheets_configured"] is False
     assert body["sheets_share_email"] is None
+    assert body["inbound_email_domain"] == "ingest.example.com"
+    assert body["inbound_configured"] is False
+
+
+def test_integrations_inbound_configured(monkeypatch):
+    monkeypatch.setattr(settings, "inbound_webhook_secret", "mg-signing-key")
+    monkeypatch.setattr(settings, "inbound_email_domain", "ingest.example.com")
+
+    response = client.get("/api/integrations")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["inbound_configured"] is True
     assert body["inbound_email_domain"] == "ingest.example.com"
 
 

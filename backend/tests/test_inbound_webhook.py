@@ -77,7 +77,7 @@ def _mock_pipeline(monkeypatch):
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "app.api.routes.inbound.execute_run",
+        "app.api.routes.inbound.schedule_run",
         AsyncMock(),
     )
 

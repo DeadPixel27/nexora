@@ -62,10 +62,17 @@ async def lifespan(_app: FastAPI):
 
     ensure_pipeline_templates_seeded()
     if settings.orphan_reclaim_on_startup:
-        from app.services.pipeline.orphan_reclaim import reclaim_all_running
+        from app.services.pipeline.orphan_reclaim import (
+            reclaim_all_running,
+            reclaim_stale_running,
+        )
 
         try:
-            await reclaim_all_running()
+            # With Redis workers, API restart must not fail in-flight worker jobs.
+            if settings.job_queue_enabled:
+                await reclaim_stale_running()
+            else:
+                await reclaim_all_running()
         except Exception:
             import logging
 

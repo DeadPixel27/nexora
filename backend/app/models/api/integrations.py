@@ -10,3 +10,4 @@ class IntegrationsStatusResponse(BaseModel):
     sheets_configured: bool = False
     sheets_share_email: Optional[str] = None
     inbound_email_domain: str = ""
+    inbound_configured: bool = False

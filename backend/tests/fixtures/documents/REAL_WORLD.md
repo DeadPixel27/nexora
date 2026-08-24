@@ -55,7 +55,7 @@ After download, copy a **20–30 file sample** into `invoices/midd/` or similar 
 
 ## What we will not do
 
-- Scrape Document Processor competitors’ customer uploads
+- Scrape IDP / document-AI competitors’ customer uploads
 - Use BNY / employer documents
 - Commit PII (GSTIN, account numbers from real people) to git
 

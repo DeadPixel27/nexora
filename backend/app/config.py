@@ -132,6 +132,9 @@ class Settings(BaseSettings):
     # How long to remember tokens to ignore replays (single-replica in-memory)
     inbound_webhook_token_ttl_seconds: int = 900
 
+    # Job queue — Redis URL enables Arq workers (empty = in-process asyncio fallback)
+    redis_url: str = ""
+
     # Comma-separated origins for CORS (e.g. http://localhost:3000,https://app.vercel.app)
     cors_origins: str = "http://localhost:3000"
 
@@ -184,6 +187,11 @@ class Settings(BaseSettings):
         if env in {"production", "prod"}:
             return True
         return os.getenv("RAILWAY_ENVIRONMENT", "").strip().lower() == "production"
+
+    @property
+    def job_queue_enabled(self) -> bool:
+        """True when REDIS_URL is set — API enqueues; Arq workers execute runs."""
+        return bool(self.redis_url.strip())
 
     def require_persistent_backend(self, backend_name: str) -> None:
         """Raise if production is using in-memory data persistence."""

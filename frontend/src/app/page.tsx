@@ -264,7 +264,8 @@ export default function HomePage() {
             <p className="text-sm text-muted-foreground max-w-[540px] mx-auto">
               Upload invoices, receipts, POs, and bank statements. Nexora extracts
               structured fields, pushes to Google Sheets, emails results to your
-              team — and inbound email processing is coming soon.
+              team, or runs a workflow when you forward attachments to inbound
+              email.
             </p>
           </div>
 

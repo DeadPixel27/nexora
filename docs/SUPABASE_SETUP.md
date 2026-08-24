@@ -10,11 +10,15 @@ Follow these steps to persist users, workflows, and runs in Postgres (survives s
 
 ## 2. Run the schema
 
-1. In Supabase Dashboard → **SQL Editor** → **New query**
-2. Copy the entire contents of [`backend/supabase/schema.sql`](../backend/supabase/schema.sql)
-3. Click **Run**
-4. Run [`backend/supabase/seed_templates.sql`](../backend/supabase/seed_templates.sql) the same way (pipeline template catalog)
-5. You should see `Success` for both
+Keep numbered files under [`backend/supabase/migrations/`](../backend/supabase/migrations/) (`001`–`016`). Do **not** squash them into one dump — they are the history for existing databases.
+
+**New project (recommended):** three SQL Editor runs, not sixteen:
+
+1. [`backend/supabase/schema.sql`](../backend/supabase/schema.sql) — current tables through `016_audit_events`
+2. [`backend/supabase/seed_templates.sql`](../backend/supabase/seed_templates.sql) — pipeline template catalog
+3. [`backend/supabase/migrations/013_storage_private.sql`](../backend/supabase/migrations/013_storage_private.sql) — private `documents` + `user-templates` buckets and client deny policy
+
+You should see `Success` after each.
 
 Tables created:
 
@@ -30,7 +34,7 @@ Tables created:
 
 ### Existing projects — run migrations
 
-If the project already had an older schema, apply numbered files under [`backend/supabase/migrations/`](../backend/supabase/migrations/) in order (through at least `012_uploads.sql` and `013_storage_private.sql`) instead of re-running the full `schema.sql`.
+If the project already had an older schema, apply numbered files under [`backend/supabase/migrations/`](../backend/supabase/migrations/) in order through `016_audit_events.sql` instead of re-running the full `schema.sql`.
 
 > Older note: [`002_add_users_and_run_document_ids.sql`](../backend/supabase/migrations/002_add_users_and_run_document_ids.sql) was the first incremental migration for very early schemas.
 

@@ -7,13 +7,14 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import {
   ApiError,
   getWorkflowTemplateVersions,
+  listInboundAddresses,
   revertWorkflowToVersion,
+  type InboundAddress,
   type TemplateVersionSummary,
   type WorkflowResponse,
 } from "@/lib/api";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { pricingHref, WAITLIST_SOURCES } from "@/lib/waitlist-source";
 
 interface DetailSidebarProps {
   workflow: WorkflowResponse;
@@ -26,6 +27,11 @@ export function DetailSidebar({
 }: DetailSidebarProps) {
   const [versions, setVersions] = useState<TemplateVersionSummary[]>([]);
   const [reverting, setReverting] = useState<string | null>(null);
+  const [inboundAddress, setInboundAddress] = useState<InboundAddress | null>(
+    null,
+  );
+
+  const settingsHref = `/workflows/${workflow.workflow_id}/settings`;
 
   const loadVersions = useCallback(async () => {
     try {
@@ -38,9 +44,24 @@ export function DetailSidebar({
     }
   }, [workflow.workflow_id]);
 
+  const loadInbound = useCallback(async () => {
+    try {
+      const addresses = await listInboundAddresses();
+      setInboundAddress(
+        addresses.find((a) => a.workflow_id === workflow.workflow_id) ?? null,
+      );
+    } catch {
+      setInboundAddress(null);
+    }
+  }, [workflow.workflow_id]);
+
   useEffect(() => {
     void loadVersions();
   }, [loadVersions]);
+
+  useEffect(() => {
+    void loadInbound();
+  }, [loadInbound]);
 
   async function handleSetCurrent(versionId: string) {
     setReverting(versionId);
@@ -56,10 +77,16 @@ export function DetailSidebar({
     }
   }
 
+  const truncatedInbound = inboundAddress
+    ? inboundAddress.full_address.length > 28
+      ? `${inboundAddress.full_address.slice(0, 26)}…`
+      : inboundAddress.full_address
+    : null;
+
   return (
     <aside className="space-y-6">
       <Link
-        href={`/workflows/${workflow.workflow_id}/settings`}
+        href={settingsHref}
         className={cn(buttonVariants({ variant: "outline" }), "w-full text-xs h-9")}
       >
         Workflow Settings
@@ -85,14 +112,24 @@ export function DetailSidebar({
           <span>UI Upload</span>
           <span className="v2-badge-success">active</span>
         </div>
-        <div className="flex items-center justify-between rounded-md border px-3 py-2 text-xs">
-          <span>Inbound Email</span>
-          <Link
-            href={pricingHref(WAITLIST_SOURCES.inboundEmail)}
-            className="v2-badge-muted hover:underline"
-          >
-            Pro · join waitlist
-          </Link>
+        <div className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs">
+          <span className="shrink-0">Inbound Email</span>
+          {inboundAddress ? (
+            <Link
+              href={settingsHref}
+              className="v2-badge-success hover:underline truncate max-w-[11rem]"
+              title={inboundAddress.full_address}
+            >
+              {truncatedInbound}
+            </Link>
+          ) : (
+            <Link
+              href={settingsHref}
+              className="v2-badge-muted hover:underline shrink-0"
+            >
+              Configure in settings
+            </Link>
+          )}
         </div>
       </section>
 

@@ -463,6 +463,23 @@ class SupabaseRepository:
             return None
         return _inbound_address_from_row(rows[0])
 
+    def get_inbound_address_for_workflow(
+        self, workflow_id: str
+    ) -> Optional[InboundAddress]:
+        resp = (
+            _get_client()
+            .table("inbound_addresses")
+            .select("*")
+            .eq("workflow_id", workflow_id)
+            .order("created_at", desc=False)
+            .limit(1)
+            .execute()
+        )
+        rows = resp.data or []
+        if not rows:
+            return None
+        return _inbound_address_from_row(rows[0])
+
     def list_inbound_addresses(self, user_id: str) -> list[InboundAddress]:
         resp = (
             _get_client()

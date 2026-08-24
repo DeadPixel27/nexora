@@ -6,16 +6,16 @@ import logging
 import time
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from app.api.dependencies import InboundEmailServiceDep, WorkflowServiceDep
 from app.api.usage_http import charge_run_pages_or_abandon, enforce_upload_usage
 from app.config import settings
+from app.jobs import schedule_run
 from app.models.domain.document import InvalidUploadError
 from app.models.domain.email import InboundAddressNotFoundError
 from app.rate_limit import limiter
 from app.services.documents.upload_loader import UploadNotFoundError
-from app.services.pipeline.runner import execute_run
 from app.services.workflows.workflow_service import WorkflowNotFoundError
 
 router = APIRouter(prefix="/api/inbound", tags=["inbound"])
@@ -89,7 +89,6 @@ def _verify_mailgun_signature(token: str, timestamp: str, signature: str) -> Non
 @limiter.limit(settings.rate_limit_inbound)
 async def receive_inbound_email(
     request: Request,
-    background_tasks: BackgroundTasks,
     inbound: InboundEmailServiceDep,
     workflows: WorkflowServiceDep,
 ):
@@ -136,7 +135,7 @@ async def receive_inbound_email(
         from app.services.audit.events import log_audit
 
         set_user_id(owner_user_id)
-        background_tasks.add_task(execute_run, run.run_id)
+        await schedule_run(run.run_id)
         _mark_token_seen(token)
         await log_audit(
             "inbound.received",

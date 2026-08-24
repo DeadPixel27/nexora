@@ -24,10 +24,12 @@ Upload PDFs or images, describe the task in plain English, and get structured JS
 
 ## Tech stack
 
-- **Backend:** Python 3.9+, FastAPI, Groq (Llama 3.3)
-- **PDF/OCR:** PyMuPDF, Tesseract
-- **Persistence:** Supabase (optional) or in-memory
+- **Backend:** Python 3.11+, FastAPI, Groq (Llama 3.3), OpenAI (GPT-4o)
+- **Jobs:** Redis + Arq worker (`schedule_run` → `execute_run`)
+- **PDF/OCR:** PyMuPDF, RapidOCR / Tesseract, Docling
+- **Persistence:** Supabase (Postgres + Storage)
 - **Frontend:** Next.js 14 + TypeScript + Tailwind + shadcn/ui
+- **Deploy:** Vercel (frontend) + Railway (API + worker) + Upstash Redis
 
 ## Quick start
 

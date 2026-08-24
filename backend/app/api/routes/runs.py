@@ -4,7 +4,7 @@ Runs Route — execute pipeline plans and fetch run results.
 
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from app.api.dependencies import (
     CurrentUserDep,
@@ -22,6 +22,7 @@ from app.api.usage_http import (
     enforce_upload_usage,
 )
 from app.config import settings
+from app.jobs import schedule_run
 from app.models.api.runs import (
     RunAdhocRequest,
     RefinePlanRequest,
@@ -42,15 +43,11 @@ from app.rate_limit import limiter
 from app.models.domain.template import TemplateNotFoundError
 from app.services.documents.upload_loader import UploadNotFoundError
 from app.services.pipeline.planner import create_plan
-from app.services.pipeline.runner import execute_run, start_run
+from app.services.pipeline.runner import start_run
 from app.services.usage.metering import RefineLimitError, check_refine_allowed
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 logger = logging.getLogger("api")
-
-
-def _schedule_run(background_tasks: BackgroundTasks, run_id: str) -> None:
-    background_tasks.add_task(execute_run, run_id)
 
 
 @router.post("/adhoc", response_model=RunResponse)
@@ -58,7 +55,6 @@ def _schedule_run(background_tasks: BackgroundTasks, run_id: str) -> None:
 async def run_adhoc(
     request: Request,
     body: RunAdhocRequest,
-    background_tasks: BackgroundTasks,
     repo: RepoDep,
     current_user: CurrentUserDep,
 ) -> RunResponse:
@@ -85,7 +81,7 @@ async def run_adhoc(
         run,
         page_count=page_count,
     )
-    _schedule_run(background_tasks, run.run_id)
+    await schedule_run(run.run_id)
     return to_run_response(run)
 
 
@@ -94,7 +90,6 @@ async def run_adhoc(
 async def run_template(
     request: Request,
     body: RunTemplateRequest,
-    background_tasks: BackgroundTasks,
     template_service: TemplateServiceDep,
     versions: VersionServiceDep,
     repo: RepoDep,
@@ -135,7 +130,7 @@ async def run_template(
         page_count=page_count,
         template_id=body.template_id,
     )
-    _schedule_run(background_tasks, run.run_id)
+    await schedule_run(run.run_id)
     return to_run_response(run)
 
 
@@ -144,7 +139,6 @@ async def run_template(
 async def run_pipeline_steps(
     request: Request,
     body: RunRequest,
-    background_tasks: BackgroundTasks,
     repo: RepoDep,
     current_user: CurrentUserDep,
 ) -> RunResponse:
@@ -171,7 +165,7 @@ async def run_pipeline_steps(
         run,
         page_count=page_count,
     )
-    _schedule_run(background_tasks, run.run_id)
+    await schedule_run(run.run_id)
     return to_run_response(run)
 
 
@@ -313,7 +307,6 @@ async def refine_run(
     request: Request,
     run_id: str,
     body: RunRefineRequest,
-    background_tasks: BackgroundTasks,
     refine_service: RefineServiceDep,
     repo: RepoDep,
     current_user: CurrentUserDep,
@@ -385,7 +378,7 @@ async def refine_run(
 
     # Targeted single-field refine returns a completed run — skip re-execution
     if run.status == "running":
-        _schedule_run(background_tasks, run.run_id)
+        await schedule_run(run.run_id)
     logger.info(
         "[refine] apply queued child_run_id=%s parent_run_id=%s status=%s summary=%r",
         run.run_id,

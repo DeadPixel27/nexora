@@ -12,8 +12,9 @@ How we run production: hosts, where env vars live, and the ship checklist.
 User → Vercel (Next.js frontend)
          │  HTTPS REST
          ▼
-       Railway (FastAPI backend, Docker)
+       Railway API (FastAPI, Docker)
          │
+         ├── Upstash Redis ──► Railway Worker (Arq) ×1 (scale to 3 for Reddit)
          ├── Supabase (Postgres + private Storage)
          ├── OpenAI / Groq (LLMs)
          ├── Resend (outbound email)      [optional]
@@ -23,7 +24,9 @@ User → Vercel (Next.js frontend)
 | Layer | Host | Role |
 |-------|------|------|
 | Frontend | **Vercel** | Next.js App Router |
-| Backend | **Railway** | FastAPI via [`backend/Dockerfile`](../backend/Dockerfile) |
+| API | **Railway** | FastAPI via [`backend/Dockerfile`](../backend/Dockerfile) — enqueue jobs |
+| Worker | **Railway** (2nd service) | `arq app.jobs.worker.WorkerSettings` — OCR + LLM |
+| Queue | **Upstash Redis** | `run_id` jobs only |
 | Data + files | **Supabase** | Postgres + buckets `documents`, `user-templates` |
 
 Branch mindset: `main` is production-ready; deploy backend/frontend from the release branch you intend to ship.
@@ -86,6 +89,7 @@ Copy from [`backend/.env.example`](../backend/.env.example). Minimum for a worki
 | `SUPABASE_DOCUMENTS_BUCKET` | Recommended | `documents` |
 | `USER_TEMPLATE_STORAGE` | Recommended | `auto` |
 | `SUPABASE_USER_TEMPLATES_BUCKET` | Recommended | `user-templates` |
+| `REDIS_URL` | Yes (prod queue) | Upstash `rediss://…` — without it, API falls back to in-process tasks |
 
 Optional / feature flags:
 
@@ -103,15 +107,34 @@ Full cheat sheet: [ARCHITECTURE.md §10](./ARCHITECTURE.md#10-keys--config-cheat
 
 ## Rebrand / new cloud projects (Nexora)
 
-You will eventually recreate vendor accounts under the **Nexora** name (new Google Cloud project, Supabase project, OAuth client, Resend domain, Mailgun domain). Until then, **current AgentFlow-named credentials are fine for local testing** — do not block ship work on renaming.
+Create vendor projects named **Nexora** (not AgentFlow / Document Processor). Local folder name does not have to match.
 
 When you cut over:
 
-1. **Google Cloud** — new project → OAuth Web client (`GOOGLE_CLIENT_ID` / `NEXT_PUBLIC_GOOGLE_CLIENT_ID`) + Sheets service account JSON (`GOOGLE_SERVICE_ACCOUNT_JSON`). Update Railway/Vercel + local `.env`. Users must re-share spreadsheets with the **new** `client_email` as Editor.
-2. **Supabase** — new project → run schema/migrations + private buckets → swap `SUPABASE_URL` / `SUPABASE_SECRET_KEY` (and bucket names if changed).
-3. **Resend** — new API key + verified sending domain (`RESEND_API_KEY` / `RESEND_FROM_EMAIL`).
-4. **Mailgun (inbound)** — new receiving domain + webhook signing key (`INBOUND_EMAIL_DOMAIN` / `INBOUND_WEBHOOK_SECRET`) pointed at `POST /api/inbound/email`.
-5. Smoke: `/api/health`, `/api/integrations` (shows Sheets share email), Google sign-in, one email send, one Sheets push, one inbound attachment if enabled.
+1. **Google Cloud** — new project **nexora** → OAuth Web client (`GOOGLE_CLIENT_ID` / `NEXT_PUBLIC_GOOGLE_CLIENT_ID`) + Sheets service account JSON (`GOOGLE_SERVICE_ACCOUNT_JSON`). Update Railway/Vercel + local `.env`. Users must re-share spreadsheets with the **new** `client_email` as Editor.
+2. **Supabase** — new project **nexora** → [`schema.sql`](../backend/supabase/schema.sql) + [`seed_templates.sql`](../backend/supabase/seed_templates.sql) + [`013_storage_private.sql`](../backend/supabase/migrations/013_storage_private.sql) (keep numbered migrations; do not squash). Swap `SUPABASE_URL` / `SUPABASE_SECRET_KEY`.
+3. **Railway** — services **nexora-api** and **nexora-worker**; **Upstash** Redis database name can be `nexora-jobs`.
+4. **Vercel** — project **nexora**.
+5. **Resend** — new API key + verified sending domain (`RESEND_API_KEY` / `RESEND_FROM_EMAIL`).
+6. **Mailgun (inbound)** — skip until you have a domain; see [Mailgun inbound setup](#mailgun-inbound-setup-one-catch-all-route) below.
+7. Smoke: `/api/health`, `/api/integrations` (Sheets share email + `inbound_configured`), Google sign-in, one email send, one Sheets push.
+
+GitHub: public repo should be **nexora** (see SPEC). Rename on GitHub if the remote is still `agentflow`.
+
+### Mailgun inbound setup (one catch-all route)
+
+All workflows share **one** Mailgun inbound route. Nexora routes by recipient local-part (`flow-…`) in `inbound_addresses`.
+
+1. Create a Mailgun account (Free includes **1 inbound route** — enough for launch).
+2. Add a **receiving** domain (e.g. `ingest.nexora.app`) and complete DNS (MX + TXT as Mailgun shows).
+3. In **Receiving → Routes**, add a single catch-all:
+   - **Expression:** `match_recipient(".*@ingest.nexora.app")` (use your real domain)
+   - **Action:** forward / store-and-notify to `https://<your-api-host>/api/inbound/email` (Mailgun “store and notify” / webhook POST)
+4. Copy the domain’s **HTTP webhook signing key** into Railway as `INBOUND_WEBHOOK_SECRET`.
+5. Set `INBOUND_EMAIL_DOMAIN=ingest.nexora.app` (same domain as above).
+6. Confirm `GET /api/integrations` returns `inbound_configured: true`. Create an address in Workflow Settings and email a small PDF to it.
+
+You do **not** need one Mailgun route per user or workflow.
 
 ### Integrations setup time & cost (ballpark)
 
@@ -120,7 +143,7 @@ When you cut over:
 | Google Sheets service account | ~15–30 min (create SA, enable Sheets API, download JSON, set env, restart) | **$0** — SA + Sheets API free for this use |
 | Google OAuth (sign-in) | ~30–60 min (OAuth client, authorized origins) | **$0** |
 | Resend outbound | ~30–60 min (account, API key; custom domain DNS longer) | **Free:** 3k emails/mo (100/day). Paid from ~$20/mo |
-| Mailgun inbound | ~1–2 h (domain DNS MX/TXT, route → webhook, secret) | Often **pay-as-you-go** (no lasting free tier); small launch volume is low single-digit $/mo |
+| Mailgun inbound | ~1–2 h (domain DNS MX/TXT, **one** catch-all route → webhook, secret) | **Free:** 1 inbound route (~$0). Basic $15/mo if you need more routes |
 | Supabase project swap | ~1–2 h (schema, buckets, keys, migrate data if any) | Free tier usually enough early; paid when DB/storage grows |
 | Full Nexora rebrand cutover (all of the above) | **~½–1 day** focused | Dominated by LLM spend (OpenAI/Groq), not Sheets/email |
 
@@ -160,34 +183,46 @@ Guide: [SUPABASE_SETUP.md](./SUPABASE_SETUP.md).
 
 ### 1. Supabase
 
-- Schema + migrations applied.
+- Schema + migrations applied (through `016_audit_events.sql`).
 - Private buckets + storage policy.
 - Keys ready for Railway.
 
-### 2. Backend on Railway
+### 2. Upstash Redis
 
-1. New service from this repo (root or `backend/` per how you wire Docker).
-2. Build with [`backend/Dockerfile`](../backend/Dockerfile) (`python:3.11-slim`, Tesseract, uvicorn on `:8000`).
-3. Paste all backend variables (section above).
-4. Deploy; confirm `GET /api/health` is healthy (not 503 for missing persistence).
-5. First OCR/Docling traffic may download models — warm once before launch.
+1. [upstash.com](https://upstash.com) → create Redis (free tier).
+2. Copy Redis URL (`rediss://…`) → Railway `REDIS_URL` on **both** API and worker.
 
-### 3. Frontend on Vercel
+### 3. Backend API on Railway
 
-1. Import the repo; set root to `frontend/` (or monorepo settings accordingly).
-2. Set `NEXT_PUBLIC_*` vars.
+1. New service from this repo — **Root Directory:** `backend`.
+2. Build with [`backend/Dockerfile`](../backend/Dockerfile).
+3. Paste backend variables (section above) including `REDIS_URL`.
+4. Start command (default): `uvicorn app.main:app --host 0.0.0.0 --port 8000`
+5. Generate public domain; confirm `GET /api/health` is healthy.
+
+### 4. Worker on Railway (same project)
+
+1. **New Service** → same repo, **Root Directory:** `backend`.
+2. **Same env vars** as the API (needs Supabase, LLM keys, `REDIS_URL`).
+3. **Start command:** `arq app.jobs.worker.WorkerSettings`
+4. No public domain. Leave **Replicas = 1**.
+5. For Reddit traffic: set Replicas to **3**, then back to **1** when quiet.
+
+### 5. Frontend on Vercel
+
+1. Import the repo; set root to `frontend/`.
+2. Set `NEXT_PUBLIC_*` vars (`NEXT_PUBLIC_API_URL` = Railway API URL).
 3. Deploy; open the site and confirm it hits the Railway API.
 
-### 4. Align auth + CORS
+### 6. Align auth + CORS
 
-- Google Cloud OAuth client: authorized JavaScript origins / redirect URIs include the production frontend origin.
-- `CORS_ORIGINS` on Railway includes that same origin (and any custom domain).
+- Google Cloud OAuth client: authorized JavaScript origins include the production frontend origin.
+- `CORS_ORIGINS` on Railway includes that same origin.
 - Backend `GOOGLE_CLIENT_ID` ≡ frontend `NEXT_PUBLIC_GOOGLE_CLIENT_ID`.
 
-### 5. Custom domain (optional)
+### 7. Custom domain (optional)
 
 - Point domain at Vercel; add the same origin to `CORS_ORIGINS` and Google OAuth.
-- Railway custom domain for a stable API URL if you do not want the default `*.up.railway.app`.
 
 ---
 
@@ -195,12 +230,10 @@ Guide: [SUPABASE_SETUP.md](./SUPABASE_SETUP.md).
 
 1. `GET /api/health` → OK.
 2. Sign in (Google) → session token stored; `GET /api/users/me` works.
-3. Upload → adhoc or template run → poll until complete.
+3. Upload → adhoc or template run → poll until complete (**check worker logs** for `Worker picked up`).
 4. Second user cannot `GET` that run → **403**.
 5. Hit a rate/usage limit path if configured → **429** / clear UI copy.
 6. Optional: email / Sheets / inbound webhook with secrets set.
-
-More checks: section **Smoke test after deploy** above.
 
 ---
 
@@ -211,6 +244,7 @@ More checks: section **Smoke test after deploy** above.
 | Env files | `.env` / `.env.local` on disk | Host dashboards only |
 | Persistence | Memory OK if Supabase unset | Supabase required |
 | Document storage | Local disk or Supabase | Supabase Storage (private) |
+| Job queue | Omit `REDIS_URL` (in-process) | `REDIS_URL` + separate worker service |
 | `AUTH_ALLOW_EMAIL` | May be `true` for testing | `false` |
 | `CORS_ORIGINS` | `http://localhost:3000` | Real Vercel / custom domain |
 
@@ -220,7 +254,7 @@ More checks: section **Smoke test after deploy** above.
 
 | Doc | Use |
 |-----|-----|
-| [NEXT-STEPS.md](./NEXT-STEPS.md) | Current ship order (deploy is ~step 2) |
+| [NEXT-STEPS.md](./NEXT-STEPS.md) | Current ship order |
 | [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) | DB + Storage setup |
 | [ARCHITECTURE.md §14](./ARCHITECTURE.md#14-deployment-sketch) | Mermaid sketch |
-| [SCALING-AND-JOBS.md](./SCALING-AND-JOBS.md) | Later: queues, multi-replica |
+| [SCALING-AND-JOBS.md](./SCALING-AND-JOBS.md) | Queue, workers, scale replicas |
