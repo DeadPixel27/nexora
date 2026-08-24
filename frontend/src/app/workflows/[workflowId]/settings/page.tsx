@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { Copy, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -12,17 +12,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   ApiError,
+  createInboundAddress,
+  deleteInboundAddress,
   deleteWorkflow,
+  getIntegrationsStatus,
   getWorkflow,
   getWorkflowTemplateVersions,
+  listInboundAddresses,
   revertWorkflowToVersion,
   updateWorkflowSettings,
+  type InboundAddress,
   type TemplateVersionSummary,
   type WorkflowResponse,
 } from "@/lib/api";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { pricingHref, WAITLIST_SOURCES } from "@/lib/waitlist-source";
 
 function AccountCard({
   title,
@@ -63,12 +67,21 @@ export default function WorkflowSettingsPage() {
   const [sheetsUrl, setSheetsUrl] = useState("");
   const [sheetName, setSheetName] = useState("Results");
 
+  const [inboundAddress, setInboundAddress] = useState<InboundAddress | null>(
+    null,
+  );
+  const [inboundConfigured, setInboundConfigured] = useState(false);
+  const [inboundDomain, setInboundDomain] = useState("ingest.nexora.app");
+  const [inboundBusy, setInboundBusy] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [wf, vers] = await Promise.all([
+      const [wf, vers, addresses, integrations] = await Promise.all([
         getWorkflow(workflowId),
         getWorkflowTemplateVersions(workflowId).catch(() => []),
+        listInboundAddresses().catch(() => [] as InboundAddress[]),
+        getIntegrationsStatus().catch(() => null),
       ]);
       setWorkflow(wf);
       setVersions(vers);
@@ -77,6 +90,15 @@ export default function WorkflowSettingsPage() {
       setEmailRecipient(wf.default_email ?? "");
       setSheetsUrl(wf.default_sheets_url ?? "");
       setSheetName(wf.default_sheet_name?.trim() || "Results");
+      setInboundAddress(
+        addresses.find((a) => a.workflow_id === workflowId) ?? null,
+      );
+      if (integrations) {
+        setInboundConfigured(Boolean(integrations.inbound_configured));
+        if (integrations.inbound_email_domain) {
+          setInboundDomain(integrations.inbound_email_domain);
+        }
+      }
     } catch (e) {
       setWorkflow(null);
       toastError(e instanceof ApiError ? e.message : "Failed to load settings.");
@@ -119,6 +141,48 @@ export default function WorkflowSettingsPage() {
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleCreateInbound() {
+    setInboundBusy(true);
+    try {
+      const address = await createInboundAddress(workflowId);
+      setInboundAddress(address);
+      toastSuccess("Inbound address created.");
+    } catch (e) {
+      toastError(
+        e instanceof ApiError ? e.message : "Failed to create inbound address.",
+      );
+    } finally {
+      setInboundBusy(false);
+    }
+  }
+
+  function handleCopyInbound() {
+    if (!inboundAddress) return;
+    void navigator.clipboard.writeText(inboundAddress.full_address);
+    toastSuccess("Copied inbound address.");
+  }
+
+  async function handleDeleteInbound() {
+    if (!inboundAddress) return;
+    const confirmed = window.confirm(
+      `Delete ${inboundAddress.full_address}? Emails to this address will stop starting runs.`,
+    );
+    if (!confirmed) return;
+
+    setInboundBusy(true);
+    try {
+      await deleteInboundAddress(inboundAddress.address_id);
+      setInboundAddress(null);
+      toastSuccess("Inbound address deleted.");
+    } catch (e) {
+      toastError(
+        e instanceof ApiError ? e.message : "Failed to delete inbound address.",
+      );
+    } finally {
+      setInboundBusy(false);
     }
   }
 
@@ -276,33 +340,64 @@ export default function WorkflowSettingsPage() {
 
           <AccountCard title="Inbound Email">
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Imagine forwarding an invoice from your inbox and watching this
-              workflow extract the fields — no upload UI required.
+              Forward invoices (PDF, PNG, or JPG) to a private address for this
+              workflow. Nexora starts a run and can email results or push them to
+              Sheets using Default Delivery above.
             </p>
-            <div className="rounded-lg border bg-muted/40 px-4 py-3 space-y-2 text-sm text-muted-foreground">
-              <p>
-                <span className="font-medium text-foreground">How it will work:</span>{" "}
-                each workflow gets a private address like{" "}
-                <code className="text-xs">flow-••••@ingest.nexora.app</code>. You
-                email or forward PDFs, PNGs, or JPGs to it; Nexora starts a run
-                and can email results or push them to Sheets using Default Delivery
-                above.
+            {!inboundConfigured && (
+              <p className="text-xs text-muted-foreground rounded-md border border-dashed px-3 py-2">
+                Receiving is not live on this server yet (Mailgun webhook secret
+                unset). You can still create an address; emails will work once
+                inbound is configured.
               </p>
-              <p>
-                <span className="font-medium text-foreground">Coming with Pro:</span>{" "}
-                unique addresses, attachment intake, and the same extraction
-                quality you get from upload today. We&apos;re collecting interest
-                before turning it on.
-              </p>
-            </div>
-            <Link
-              href={pricingHref(WAITLIST_SOURCES.inboundEmail)}
-              className="inline-flex"
-            >
-              <Button type="button" className="w-full sm:w-auto">
-                Join Pro waitlist for inbound email
-              </Button>
-            </Link>
+            )}
+            {inboundAddress ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
+                  <code className="text-xs flex-1 break-all text-foreground">
+                    {inboundAddress.full_address}
+                  </code>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopyInbound}
+                    disabled={inboundBusy}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={inboundBusy}
+                  onClick={() => void handleDeleteInbound()}
+                >
+                  {inboundBusy && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Delete address
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Addresses look like{" "}
+                  <code className="text-[11px]">flow-••••@{inboundDomain}</code>
+                  . One address per workflow.
+                </p>
+                <Button
+                  type="button"
+                  disabled={inboundBusy}
+                  onClick={() => void handleCreateInbound()}
+                >
+                  {inboundBusy && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Create address
+                </Button>
+              </div>
+            )}
           </AccountCard>
 
           <AccountCard title="Versions">

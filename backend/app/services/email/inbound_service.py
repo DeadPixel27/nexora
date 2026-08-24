@@ -26,7 +26,11 @@ class InboundEmailService:
         user_id: str,
         workflow_id: str,
     ) -> InboundAddress:
-        """Generate a unique inbound email address for a workflow."""
+        """Return existing address for this workflow, or mint a new one."""
+        existing = self._repo.get_inbound_address_for_workflow(workflow_id)
+        if existing is not None:
+            return existing
+
         prefix = f"flow-{uuid.uuid4().hex[:8]}"
         address = InboundAddress(
             address_id=prefix,

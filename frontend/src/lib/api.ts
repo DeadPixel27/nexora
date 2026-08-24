@@ -574,6 +574,7 @@ export interface IntegrationsStatus {
   sheets_configured: boolean;
   sheets_share_email: string | null;
   inbound_email_domain: string;
+  inbound_configured: boolean;
 }
 
 export async function getIntegrationsStatus(): Promise<IntegrationsStatus> {

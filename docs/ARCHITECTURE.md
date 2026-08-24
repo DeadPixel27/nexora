@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Product** | Nexora (Document Processor) — upload documents, describe a task (or pick a template), run an AI agent pipeline, get structured rows, refine via chat, optionally save as a reusable workflow |
+| **Product** | Nexora — upload documents, describe a task (or pick a template), run an AI agent pipeline, get structured rows, refine via chat, optionally save as a reusable workflow |
 | **Stack** | Next.js (App Router) ↔ FastAPI ↔ Groq (plan/refine) + OpenAI GPT-4o (extract) + RapidOCR/Tesseract ↔ Supabase Postgres + Storage |
 | **Repos** | [`backend/`](../backend/), [`frontend/`](../frontend/) |
 | **Related** | Product/API detail: [SPEC.md](./SPEC.md) · Engineering rules: [ENGINEERING-PRINCIPLES.md](./ENGINEERING-PRINCIPLES.md) · Next work: [NEXT-STEPS.md](./NEXT-STEPS.md) |
@@ -33,7 +33,7 @@
 
 ## 1. Elevator pitch & mental model
 
-**What it does:** A user uploads PDFs/images (invoices, receipts, resumes, etc.), picks a **template** or writes a plain-English **task**. The backend **plans** a short agent pipeline (OCR/text → LLM field extract → **deterministic normalize** → rules → format), **runs** it asynchronously, and the UI **polls** until structured rows appear. The user can **refine** extraction in chat (creates a versioned child run), **save as a workflow** for reuse, and optionally deliver via **email** or **Google Sheets**. **Inbound email** (Mailgun → workflow address) exists in the API but launch UI gates it behind the Pro waitlist.
+**What it does:** A user uploads PDFs/images (invoices, receipts, resumes, etc.), picks a **template** or writes a plain-English **task**. The backend **plans** a short agent pipeline (OCR/text → LLM field extract → **deterministic normalize** → rules → format), **runs** it asynchronously, and the UI **polls** until structured rows appear. The user can **refine** extraction in chat (creates a versioned child run), **save as a workflow** for reuse, and optionally deliver via **email** or **Google Sheets**. **Inbound email** (Mailgun → `flow-…@` workflow address) is available in Workflow Settings.
 
 **One-line architecture:**
 
@@ -144,7 +144,7 @@ sequenceDiagram
   API->>Plan: create_plan if adhoc
   API->>DB: insert workflow_runs status running
   API-->>FE: run_id
-  API->>Run: BackgroundTasks execute_run
+  API->>Run: schedule_run → Redis Arq worker (or in-process if no REDIS_URL)
   loop Each planned step
     Note over Run,Ext: Typical order: OCR/text → field_extractor → normalize → rules → formatter
     Run->>Ext: field_extractor when needed
@@ -166,7 +166,7 @@ sequenceDiagram
 | Doc media | `POST .../documents/{id}/access` then `GET ...?doc_token=` | `jwt.create_document_access_token` | Short-lived capability token for `<img>`/`<iframe>` |
 | Plan | inside adhoc / `POST /api/pipeline/create` | `planner.create_plan` | Groq + agent catalog; after extract always insert **normalize** before rules/formatter |
 | Template plan | `/api/runs/template` | `template_planner.create_plan_from_template` | Code templates; always inserts `transform.normalize` between extract and rules |
-| Start run | `/api/runs/*` | `start_run` + `BackgroundTasks` | Check pages → start → **reserve** pages; refund on fail |
+| Start run | `/api/runs/*` | `start_run` + `schedule_run` (Arq) | Check pages → start → **reserve** pages; refund on fail |
 | Execute | background | `runner.execute_run` | Handlers via `get_handler`; `ctx.data` carries `user_id`/`run_id` for outbound agents |
 | Poll | `GET /api/runs/{id}` | ownership check | Frontend `useRunPolling` @ **1500ms** |
 | Refine plan | `POST .../refine/plan` | `refine_chat.plan_refinement` | Cap check → clarify; `in_scope=false` refuses; ready → page charge then GPT-4o preview |
@@ -682,7 +682,7 @@ Code: `metering.py`, `usage_http.py`, `openai_cost.py`. Frontend: `UsageLimitMod
 
 ### Status probe
 
-`GET /api/integrations` (**public**): `email_configured`, `sheets_configured`, `sheets_share_email` (service account `client_email`), `inbound_email_domain`. Powers Account + Sheets share hint UI.
+`GET /api/integrations` (**public**): `email_configured`, `sheets_configured`, `sheets_share_email` (service account `client_email`), `inbound_email_domain`, `inbound_configured` (true when `INBOUND_WEBHOOK_SECRET` is set). Powers Account + Sheets share hint + inbound UI.
 
 ### Outbound email (Resend)
 
@@ -703,8 +703,9 @@ Code: `metering.py`, `usage_http.py`, `openai_cost.py`. Frontend: `UsageLimitMod
 
 - `INBOUND_EMAIL_DOMAIN` (e.g. `ingest.nexora.app`)
 - `INBOUND_WEBHOOK_SECRET` — HMAC verify; empty secret rejects webhooks
-- **Launch product:** Workflow Settings CTAs to `/pricing?source=inbound_email` (Pro waitlist). **No** create-address UI yet.
-- **Backend still live:** CRUD `/api/inbound-addresses` + `POST /api/inbound/email` (HMAC → attachments → metered workflow run) for when Pro/Mailgun go live.
+- **Product:** Workflow Settings create / copy / delete one `flow-…@` address per workflow. Sidebar shows address or “Configure in settings”.
+- **Ops:** One Mailgun catch-all route → `POST /api/inbound/email` (see [DEPLOYMENT.md](./DEPLOYMENT.md#mailgun-inbound-setup-one-catch-all-route)). Create is idempotent per workflow.
+- **Backend:** CRUD `/api/inbound-addresses` + webhook (HMAC → attachments → metered workflow run).
 
 ### Waitlist
 
@@ -761,7 +762,8 @@ Code: `metering.py`, `usage_http.py`, `openai_cost.py`. Frontend: `UsageLimitMod
 | `INBOUND_EMAIL_DOMAIN` | | `ingest.nexora.app` |
 | `INBOUND_WEBHOOK_SECRET` | Mailgun signing | required if inbound on |
 | `INBOUND_WEBHOOK_MAX_AGE_SECONDS` | Replay window | see config |
-| `ORPHAN_RECLAIM_ON_STARTUP` / `ORPHAN_RUN_STALE_MINUTES` | Stuck BackgroundTasks | launch posture |
+| `REDIS_URL` | Arq job queue | empty = in-process local fallback |
+| `ORPHAN_RECLAIM_ON_STARTUP` / `ORPHAN_RUN_STALE_MINUTES` | Stuck runs | queue on → stale-only reclaim |
 | `ADMIN_API_KEY` | `X-Admin-Key` header | optional |
 
 Hardcoded in settings: `allowed_extensions` = `{.pdf,.png,.jpg,.jpeg}`.
@@ -907,7 +909,7 @@ A: Health, integrations status, auth endpoints, waitlist, **template catalog**. 
 A: `PERSISTENCE_BACKEND=auto` uses Supabase when URL+secret set, else in-memory (tests/dev, data lost on restart). Same service code via repository protocols.
 
 **Q: How does inbound email work?**  
-A: **Product (launch):** waitlist CTA (`source=inbound_email`). **Backend:** user can still bind `flow-…@INBOUND_EMAIL_DOMAIN` via API; Mailgun HMAC webhook stores attachments and starts the workflow as the owning user (metered).
+A: User creates one `flow-…@INBOUND_EMAIL_DOMAIN` address per workflow in Settings. Mailgun catch-all posts to the HMAC webhook; Nexora stores attachments and starts the workflow as the owning user (metered). Receiving requires `INBOUND_WEBHOOK_SECRET` set.
 
 **Q: Where do refined prompts live?**  
 A: Not only in Postgres. Metadata in `user_template_versions`; full payload in private `user-templates` storage under `storage_key`. Master templates stay in code.
@@ -928,15 +930,17 @@ A: Deleting a user cascades workflows, inbound addresses, usage. Deleting a work
 ```mermaid
 flowchart LR
   User --> Vercel["Vercel Next.js"]
-  Vercel -->|"HTTPS REST"| Railway["Railway FastAPI"]
+  Vercel -->|"HTTPS REST"| Railway["Railway API"]
+  Railway --> Redis["Upstash Redis"]
+  Redis --> Worker["Railway Arq worker"]
   Railway --> Supabase
-  Railway --> OpenAI
-  Railway --> Groq
+  Worker --> OpenAI
+  Worker --> Groq
   Railway --> Resend
   Mailgun --> Railway
 ```
 
-Checklist mindset: apply SQL migrations through **`015`** / `schema.sql`, create **private** Storage buckets (`documents`, `user-templates`), set all backend secrets on Railway (incl. `JWT_SECRET_KEY`, `GOOGLE_CLIENT_ID`, metering caps), set `NEXT_PUBLIC_*` on Vercel, align `CORS_ORIGINS` + Google OAuth authorized origins for the production origin, keep `AUTH_ALLOW_EMAIL=false`, smoke Google sign-in → upload → run → cross-user 403 → 429 UI.
+Checklist mindset: apply SQL migrations through **`016`** / `schema.sql`, create **private** Storage buckets (`documents`, `user-templates`), set all backend secrets on Railway (incl. `JWT_SECRET_KEY`, `REDIS_URL`, `GOOGLE_CLIENT_ID`, metering caps), deploy a **worker** service (`arq app.jobs.worker.WorkerSettings`), set `NEXT_PUBLIC_*` on Vercel, align `CORS_ORIGINS` + Google OAuth authorized origins for the production origin, keep `AUTH_ALLOW_EMAIL=false`, smoke Google sign-in → upload → run → cross-user 403 → 429 UI.
 
 See [NEXT-STEPS.md](./NEXT-STEPS.md) for current ship order. Deploy details: [DEPLOYMENT.md](./DEPLOYMENT.md).
 

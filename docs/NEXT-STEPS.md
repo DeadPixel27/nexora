@@ -12,7 +12,7 @@ Launch product (V2/V3 + auth/metering) is built. Remaining work below.
 | # | Task | Est. | Notes |
 |---|------|------|-------|
 | 1 | ~~**Hard usage caps per feature**~~ | done | Pages/extract, refine (cap + out-of-scope refuse), email/Sheets HTTP + agents; clear 429 modal; account shows outbound bars. |
-| 2 | **Deploy** | ~4h | Supabase + Railway + Vercel + domain + smoke test. See [DEPLOYMENT.md](./DEPLOYMENT.md). |
+| 2 | **Deploy** | ~4h | Supabase + Upstash Redis + Railway API + Worker + Vercel + smoke. See [DEPLOYMENT.md](./DEPLOYMENT.md) + [SCALING-AND-JOBS.md](./SCALING-AND-JOBS.md). |
 | 3 | **Real-doc testing** | ~3h | 3–5 docs each: invoice, receipt, resume. Score accuracy before extra hardening. |
 | 4 | **Launch kit** | ~2h | 60s Loom + Reddit / IH / HN drafts + README screenshots + live URL. |
 
@@ -22,7 +22,7 @@ Launch product (V2/V3 + auth/metering) is built. Remaining work below.
 
 - SEO template pages (`/templates/[slug]`)
 - Inbound email IMAP poll (unread + attachments → batched run)
-- Job queue / Redis / multi-replica — [SCALING-AND-JOBS.md](./SCALING-AND-JOBS.md)
+- Job queue / Redis / multi-replica — **queue shipped** (Arq + Upstash); scale worker replicas for Reddit. Multi-replica API still deferred — [SCALING-AND-JOBS.md](./SCALING-AND-JOBS.md)
 - GitHub Actions CI (`pytest` + `npm run build`)
 - Frontend tests (Vitest)
 - Supabase Auth (password / magic link) — JWT+Google is enough for launch

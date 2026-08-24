@@ -149,6 +149,14 @@ class MemoryRepository:
     def get_inbound_address(self, address_id: str) -> Optional[InboundAddress]:
         return self._inbound_addresses.get(address_id)
 
+    def get_inbound_address_for_workflow(
+        self, workflow_id: str
+    ) -> Optional[InboundAddress]:
+        for address in self._inbound_addresses.values():
+            if address.workflow_id == workflow_id:
+                return address
+        return None
+
     def list_inbound_addresses(self, user_id: str) -> list[InboundAddress]:
         return [
             address

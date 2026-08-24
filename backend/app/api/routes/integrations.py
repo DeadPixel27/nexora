@@ -17,4 +17,5 @@ async def integrations_status() -> IntegrationsStatusResponse:
         sheets_configured=bool(share_email),
         sheets_share_email=share_email,
         inbound_email_domain=settings.inbound_email_domain,
+        inbound_configured=bool(settings.inbound_webhook_secret.strip()),
     )

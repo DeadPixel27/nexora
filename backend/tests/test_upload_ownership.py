@@ -229,3 +229,19 @@ async def test_inbound_process_binds_address_owner(tmp_path, monkeypatch):
     recorded = repo.get_upload(upload_id)
     assert recorded is not None
     assert recorded.user_id == "user-owner"
+
+
+def test_create_inbound_address_is_idempotent_per_workflow(monkeypatch):
+    monkeypatch.setattr(settings, "inbound_email_domain", "ingest.test")
+
+    from app.services.email.inbound_service import InboundEmailService
+
+    repo = MemoryRepository()
+    service = InboundEmailService(repo, LocalDocumentRepository())
+    first = service.create_inbound_address("user-1", "wf-1")
+    second = service.create_inbound_address("user-1", "wf-1")
+    assert first.address_id == second.address_id
+    assert first.full_address == second.full_address
+    other = service.create_inbound_address("user-1", "wf-2")
+    assert other.address_id != first.address_id
+    assert len(repo.list_inbound_addresses("user-1")) == 2

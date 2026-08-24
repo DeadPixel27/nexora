@@ -1,9 +1,13 @@
 """
 Reclaim orphaned pipeline runs left in status=running after process death.
 
-BackgroundTasks die with the API process; DB rows can stay "running" forever.
-Launch posture (no Redis): fail those runs and refund usage.
-See docs/SCALING-AND-JOBS.md for the later queue-based design.
+Without Redis: BackgroundTasks / in-process tasks die with the API — reclaim all
+running on startup.
+
+With Redis + Arq workers: API restart must not kill jobs still running on workers;
+only reclaim *stale* runs (see ORPHAN_RUN_STALE_MINUTES).
+
+See docs/SCALING-AND-JOBS.md.
 """
 
 from __future__ import annotations

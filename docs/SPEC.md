@@ -401,7 +401,7 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 ### V2 polish (optional, pre-deploy)
 
 - [ ] Inbound webhook: email results back to sender when run completes
-- [x] Wire workflow settings page to `POST /api/inbound-addresses` (real addresses vs placeholder) — **superseded for launch:** inbound gated behind Pro waitlist (`/pricing?source=inbound_email`); backend CRUD kept
+- [x] Wire workflow settings page to `POST /api/inbound-addresses` (create / copy / delete; one address per workflow). Waitlist `source=inbound_email` kept for telemetry only.
 - [x] Sheets/email setup walkthrough in Workflow Settings + Sheets modal (`GET /api/integrations` exposes share-as-Editor email)
 - [x] Waitlist `source` telemetry: `normal` | `pages_exhausted` | `inbound_email`
 - [ ] Add `RESEND_API_KEY` / `GOOGLE_SERVICE_ACCOUNT_JSON` for live export testing

@@ -1,9 +1,9 @@
 # Nexora — Scaling, Jobs & Future Ops
 
-**Updated:** 2026-08-16  
-**Audience:** when you outgrow a single Railway API process + in-process `BackgroundTasks`.
+**Updated:** 2026-08-24  
+**Audience:** ops + architecture for API replicas, workers, and extraction scale.
 
-This doc captures decisions from the launch hardening review so we do **not** reopen them casually during ship week. For near-term product tasks see [NEXT-STEPS.md](./NEXT-STEPS.md).
+This doc captures decisions so we do **not** reopen them casually during ship week. For near-term product tasks see [NEXT-STEPS.md](./NEXT-STEPS.md).
 
 **Rule:** Whenever we defer a scaling, reliability, cost, extraction-architecture, or ops change, **add it here in the same PR/change** (see `.cursor/rules/scaling-and-jobs.mdc`). Do not leave “we’ll do it later” only in chat.
 
@@ -11,58 +11,52 @@ This doc captures decisions from the launch hardening review so we do **not** re
 
 ## Mental model (keep this)
 
-When a user starts an extraction today:
+When a user starts an extraction:
 
 1. API writes a run row with `status=running` (sticky note on the wall).
-2. FastAPI `BackgroundTasks` runs `execute_run` **inside the same process** (intern at your desk).
+2. API calls `schedule_run(run_id)`:
+   - **With `REDIS_URL`:** enqueues `run_id` on Redis (Arq).
+   - **Without Redis (local):** `asyncio.create_task(execute_run)` in-process.
+3. **Worker process** (`arq app.jobs.worker.WorkerSettings`) pulls the job and runs `execute_run`.
 
-If the process dies (redeploy, crash, restart), the intern is gone but the sticky note still says “in progress.” That is an **orphan run**. Launch fix: **reclaim** (mark failed + refund pages + stop endless UI polling). Long-term fix: a **job queue** so work survives API restarts.
+If the **API** process dies (redeploy), workers keep going. If a run is stuck `running` longer than `ORPHAN_RUN_STALE_MINUTES`, **stale reclaim** fails it + refunds pages.
 
 ---
 
-## Launch posture (now)
+## Current posture (shipped)
 
 | Choice | Why |
 |--------|-----|
-| **One Railway API replica** | BackgroundTasks are in-process; multi-replica + “fail all running on startup” can kill live jobs on another box |
-| **No Redis / no worker service yet** | Avoid extra monthly cost until load or multi-replica needs it |
-| **Orphan reclaim** | Users are not stuck forever; pages refunded; job is **not** auto-retried (user can re-run) |
-| **No extraction parallelism yet** | Batch LLM call is simpler/cheaper; parallel OCR/LLM adds cost and failure complexity |
-| **Max 10 pages per file** | Single GPT-4o call over full joined text; hard reject over-limit PDFs (UI warns). Raise when chunked extract ships (`MAX_PAGES_PER_FILE`) |
-| **OpenAI spend brakes** | Global daily pages + estimated `OPENAI_DAILY_BUDGET_USD` (in-process) while credit balance is small |
+| **Redis + Arq job queue** | Restart-safe extractions; CV/production shape. **Not Kafka** — see below |
+| **1 API + 1 worker** on Railway | Cheap CV default (~$5–10/mo); scale workers for Reddit |
+| **Upstash Redis** (free tier) | Queue only — stores `run_id`, not documents |
+| **No Redis application cache** | Metering/rate limits stay in-process until multi-replica API |
+| **Orphan reclaim** | Queue on → `reclaim_stale_running` on API startup; queue off → `reclaim_all_running` |
+| **No extraction parallelism yet** | Batch LLM call is simpler/cheaper |
+| **Max 10 pages per file** | Single GPT-4o call; raise when chunked extract ships |
+| **OpenAI spend brakes** | Global daily pages + `OPENAI_DAILY_BUDGET_USD` |
 
-Rough capacity on this posture: a handful of concurrent heavy runs, product caps (pages/day, rate limits) usually bite before the box does. Fine for early launch traffic; not for “hundreds extracting at once.”
+### Code map
 
----
+| Piece | Path |
+|-------|------|
+| Enqueue | `backend/app/jobs/enqueue.py` → `schedule_run` |
+| Worker | `backend/app/jobs/worker.py` → `WorkerSettings` |
+| Routes | `runs.py`, `workflows.py`, `inbound.py` call `await schedule_run(...)` |
+| Config | `REDIS_URL` / `settings.job_queue_enabled` |
 
-## Later: job queue (when Redis is OK)
+### Scale workers for traffic
 
-### What to add
-
-1. **Redis** (Railway Redis, Upstash, etc.) — shared to-do list.
-2. **Worker service** — separate process that only pulls jobs and calls `execute_run`.
-3. **API change** — after `start_run`, **enqueue `run_id`** instead of `BackgroundTasks.add_task`.
-4. Keep **stale reclaim** as a safety net (running longer than N minutes → fail + refund).
-
-Libraries that fit this stack well: **Arq** (async + Redis) or **RQ**. Celery works but is heavier for this app size.
-
-### Cost (order of magnitude)
-
-- Queue libraries: free/open source.
-- Money: **Redis instance + second Railway service (worker)**.
-- Do this when you need restart-safe jobs or multiple API replicas — not required for first launch.
-
-### Multi-replica / multi-server
+Railway worker service → **Replicas = 3** for a Reddit spike, then back to **1**. No code change. Three replicas = up to three concurrent extractions.
 
 ```
-User → API replica A or B or N
-         │
+User → API
          ├─► Postgres (run status)
          └─► Redis queue (run_id)
                     │
          ┌──────────┴──────────┐
          ▼                     ▼
-      Worker 1              Worker 2
+      Worker 1              Worker N
          │                     │
          └──────► GPT / OCR ───┘
                       │
@@ -70,61 +64,30 @@ User → API replica A or B or N
                    Postgres
 ```
 
-- **APIs** scale for HTTP (uploads, poll, auth). They do not do heavy extract work in-process.
-- **Workers** scale for OCR/LLM load independently.
-- Restarting APIs does **not** drop queued or in-flight worker jobs (workers own that).
-- Worker crash: queue retries / another worker picks up (design idempotency carefully).
-
-**Do not** turn on multi-replica API autoscaling while jobs still use `BackgroundTasks`.
+**Do not** turn on multi-replica **API** autoscaling until OpenAI daily spend / rate limits are shared (Redis or DB) — today those counters are in-process.
 
 ---
 
-## Later: long-document / chunked extraction
+## Why not Kafka for the job queue
 
-**Current behavior (launch):**
+Same *idea* (API hands work to another process), different *tool*. Redis + Arq is a **task queue** (consume a `run_id` once). Kafka is a **durable event log** (many consumers, replay history). Routes already only call `schedule_run(run_id)` — they do not know about Redis.
 
-- PDF text: page-by-page extract → **join into one string**.
-- Field extract: **one** GPT-4o call with the full document text (whole upload batch in one prompt).
-- Metering: bill by PDF page count; LLM sees one concatenated blob.
-- Guardrail: **`MAX_PAGES_PER_FILE=10`** — reject over-limit files (HTTP upload + inbound). Frontend shows the limit and rejects when page count is detectable.
+| | Redis + Arq (shipped) | Kafka now |
+|---|---|---|
+| **Current behavior** | Enqueue `run_id`; worker runs `execute_run`. Upstash stores the job, not documents. | Topics + consumer groups + offsets; still call `execute_run` after consume. |
+| **Cost (this stage)** | **$0/mo** Upstash free (500K commands). ~15 commands per job; 10k runs/mo still free. Paid floor ~$10/mo if you outgrow free. | Managed Kafka typically **~$50–300/mo** at tiny volume (Confluent Basic / Aiven / MSK). Dedicated starts higher. Upstash Kafka **discontinued** (Mar 2025) — no same-vendor swap. |
 
-**When to change (measured pain):**
-
-| Symptom | Direction |
-|---------|-----------|
-| Missed mid-doc fields / truncated line items on 8–10 page tables | Chunk by page or section |
-| Context / token errors on dense PDFs | Chunk + merge |
-| Latency on multi-file batches | Parallel OCR first; then capped parallel LLM |
-| Users need 20–50 page contracts | Raise page cap **only after** chunked extract ships |
-
-**Preferred chunk design (when we build it):**
-
-1. Split text by page (or ~N pages / ~token budget) with overlap for headers.
-2. Parallel GPT-4o calls **with a hard concurrency cap** (not unbounded `gather`).
-3. Reconcile: header fields from page 1 / highest-confidence; **merge arrays** (line items) and dedupe.
-4. Metering stays page-based; log OpenAI `$` per chunk via existing usage estimate.
-5. Then raise `MAX_PAGES_PER_FILE` (e.g. 25–50) and update UI copy.
-
-Do **not** ship unbounded parallel LLM for launch. Do **not** remove the per-file page cap until reconcile exists.
+- **Why deferred:** Scaling is worker replicas, then shared OpenAI metering, then chunked extract — not “Redis → Kafka.” Kafka would not avoid recoding: a transport swap is `enqueue.py` + `worker.py` (~80 lines, 1–2 days), not the app. Extra ops (partitions, offsets, monitoring) with no product win.
+- **Trigger to build:** Independent consumers of the *same* stream (billing + webhooks + search + analytics), **months of event replay** after a bug, or millions of msgs/day with long retention.
+- **Preferred approach:** Keep Redis + Arq. Keep **`schedule_run()` as the only enqueue API** so a future swap stays isolated. If Kafka is needed later, add it as an **event bus** *alongside* the job queue — do not replace Arq with Kafka for “run this extraction once.”
 
 ---
 
-## Later: extraction parallelism (only if measured)
+## Later: extraction architecture
 
-Current behavior:
+(unchanged intent — chunked extract, parallel OCR/LLM when page limits rise)
 
-- Field extract: **one** GPT-4o call for the whole document batch.
-- OCR / text extract: documents **sequentially** in the handler.
-- Pipeline steps: sequential (by design).
-
-Prefer, in order, when multi-file uploads feel slow:
-
-1. Measure (OCR vs LLM vs network).
-2. **Chunked batches** (e.g. N docs per LLM call) if context/size hurts — see long-document section above.
-3. Parallel OCR across docs if OCR is the bottleneck (watch CPU on one box).
-4. Parallel per-doc LLM only with clear caps — more $$, rate limits, partial failure, metering races.
-
-Do **not** add unbounded `asyncio.gather` over LLM calls for launch.
+See sections below for page limits and cost ops.
 
 ---
 
@@ -132,45 +95,17 @@ Do **not** add unbounded `asyncio.gather` over LLM calls for launch.
 
 | Item | Notes |
 |------|--------|
-| Persist OpenAI spend beyond one API process | Today `openai_cost` day totals are **in-process**; multi-replica needs Redis/DB |
+| Persist OpenAI spend beyond one API process | Today `openai_cost` day totals are **in-process**; multi-replica API needs Redis/DB |
 | Admin `/api/admin/openai-spend` | Snapshot only for the replica that handled calls |
 | Route simple templates to `gpt-4o-mini` | Big $/page win once quality is validated |
-| Upload TTL cleanup sweep | **Not for launch.** Implement later as **RetentionCleanupService** (separate from OwnerRefineService). Policy: delete upload bytes + `cached_documents` + `result` cells; keep refinement events + prompt blobs + catalog so master refine still works without PDFs. Product copy: [NEXT-STEPS.md](./NEXT-STEPS.md). |
-| Structured logs + `audit_events` | **Shipped in-process.** Stdout includes `rid`/`uid`. `audit_events` is append-only activity (no payloads). Central log drain (Datadog/Axiom) still later. |
-| Per-transaction rules (e.g. flag debits > X in `transactions[]`) | **Deferred.** `transform.rules` compares scalar fields only; bank `large_transaction` rule removed at launch (was broken on array field). **Trigger:** users want approval flags on individual statement lines. **Approach:** extend rules agent or post-process in refine. |
+| Upload TTL cleanup sweep | Deferred — [NEXT-STEPS.md](./NEXT-STEPS.md) |
+| Redis as cache (rate limits, inbound replay tokens) | Only when multi-replica API |
 
 ---
 
-## Related hardening still on the senior-review list
+## Triggers: when to scale further
 
-Track these separately from product NEXT-STEPS; some may already be done in-branch:
-
-| # | Topic | Notes |
-|---|--------|--------|
-| 4 | Orphan-run reclaim | Launch; no Redis |
-| 5 | Metering harden | Fail closed on `record_usage`; reduce check-then-act races |
-| 6 | Upload ownership (IDOR) | Bind uploads to `user_id` |
-| 7 | Supabase RLS / private buckets | Defense in depth beyond service role |
-| 8 | Inbound webhook replay window | Timestamp skew on Mailgun HMAC |
-| 9 | Broader rate limits | runs/workflows/extract/plan/waitlist |
-| 10 | Reject memory persistence in prod | Health fail if `persistence=memory` in production |
-
-Already addressed in recent hardening: refine page metering (#1), email/Sheets caps (#2), document capability tokens instead of JWT-in-query (#3).
-
----
-
-## Triggers: when to leave “launch posture”
-
-Add Redis + workers when any of these become true:
-
-- You want **more than one** API replica / autoscaling.
-- Redeploys are frequent and **re-running failed orphan jobs** is painful for users.
-- Concurrent extracts saturate the single process (queue backs up in practice).
-- You need retries, delayed jobs, or priority queues.
-
-Raise per-file page limits / add chunked extract when:
-
-- Real users hit the **10-page** reject often with valid use cases.
-- Accuracy on dense multi-page tables is measurably bad under single-call extract.
-
-Until then: one replica, BackgroundTasks, orphan reclaim, product caps, 10 pages/file.
+- Scale **workers** 1 → 3 when concurrent extractions queue up (Reddit).
+- Add **Redis cache** for OpenAI budget / rate limits when running **>1 API** replica.
+- Raise per-file page limits / chunked extract when users hit the 10-page reject often.
+- Consider Kafka (or similar) only as an **event bus** when multiple systems must independently consume/replay run events — not as a replacement for the Arq job queue.

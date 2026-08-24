@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Loader2, Mail } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
@@ -71,20 +71,6 @@ function sourceBanner(source: WaitlistSource): React.ReactNode {
       </div>
     );
   }
-  if (source === WAITLIST_SOURCES.inboundEmail) {
-    return (
-      <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-950 flex gap-3">
-        <Mail className="h-5 w-5 shrink-0 mt-0.5 text-blue-700" />
-        <div className="space-y-1">
-          <p className="font-medium">Inbound email is on the Pro roadmap</p>
-          <p className="text-blue-900/80">
-            Forward invoices and docs to a workflow address and Nexora runs
-            extraction automatically. Join the waitlist so we know you want it.
-          </p>
-        </div>
-      </div>
-    );
-  }
   return null;
 }
 
@@ -149,6 +135,7 @@ function PricingPageInner() {
                 "CSV & JSON export",
                 "Email delivery",
                 "Google Sheets push",
+                "Inbound email → workflow runs",
               ]}
               cta={
                 <Link href="/">
@@ -165,7 +152,6 @@ function PricingPageInner() {
               highlight
               features={[
                 "Unlimited pages",
-                "Inbound email → workflow runs",
                 "Priority extraction (faster models)",
                 "Custom templates",
                 "API access",
@@ -216,7 +202,7 @@ function PricingPageInner() {
                       </Label>
                       <Textarea
                         id="waitlist-feedback"
-                        placeholder="e.g. need inbound email for invoices, higher page limits, Sheets automation…"
+                        placeholder="e.g. higher page limits, API access, Sheets automation…"
                         value={feedback}
                         onChange={(e) =>
                           setFeedback(e.target.value.slice(0, MAX_FEEDBACK_CHARS))
@@ -233,11 +219,7 @@ function PricingPageInner() {
                       {loading && (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       )}
-                      {source === WAITLIST_SOURCES.inboundEmail
-                        ? "Join waitlist for inbound email"
-                        : stored?.email
-                          ? "Join waitlist"
-                          : "Join Pro waitlist"}
+                      {stored?.email ? "Join waitlist" : "Join Pro waitlist"}
                     </Button>
                   </form>
                 )
