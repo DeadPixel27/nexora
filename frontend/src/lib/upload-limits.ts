@@ -37,7 +37,12 @@ export async function countPdfPages(file: File): Promise<number | null> {
     return Number.isFinite(n) && n > 0 ? n : null;
   }
 
-  const counts = [...text.matchAll(/\/Count\s+(\d+)/g)].map((m) => Number(m[1]));
+  const counts: number[] = [];
+  const countRe = /\/Count\s+(\d+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = countRe.exec(text)) !== null) {
+    counts.push(Number(match[1]));
+  }
   const positive = counts.filter((n) => Number.isFinite(n) && n > 0);
   if (!positive.length) return null;
   return Math.max(...positive);
