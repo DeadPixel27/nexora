@@ -90,20 +90,21 @@ GET  /api/workflows/{id}/runs     # run history
 ## Project structure
 
 ```
-backend/     # FastAPI app, supabase/, tests/
-frontend/    # Next.js app
-docs/        # All reference documentation (start at docs/README.md)
-README.md    # This file
+backend/          # FastAPI app, supabase/, tests/
+frontend/         # Next.js app
+ARCHITECTURE.md   # System architecture (interview / recruiter map)
+docs/             # Spec, deploy, engineering principles, next steps
+README.md         # This file
 ```
 
 ## Documentation
 
-**Everything is under [`docs/`](docs/README.md).**
+**Architecture** is at the repo root: [`ARCHITECTURE.md`](ARCHITECTURE.md). Other reference docs are under [`docs/`](docs/README.md).
 
 | Start here | |
 |------------|--|
 | [docs/README.md](docs/README.md) | Index |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Prod / secrets |
 | [docs/NEXT-STEPS.md](docs/NEXT-STEPS.md) | Current ship order |
 | [docs/ENGINEERING-PRINCIPLES.md](docs/ENGINEERING-PRINCIPLES.md) | Code rules |

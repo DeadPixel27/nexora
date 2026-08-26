@@ -101,7 +101,7 @@ Optional / feature flags:
 | `ADMIN_API_KEY` | Admin header routes |
 | Rate limits / page caps | Defaults in `.env.example` are fine to start |
 
-Full cheat sheet: [ARCHITECTURE.md §10](./ARCHITECTURE.md#10-keys--config-cheat-sheet).
+Full cheat sheet: [ARCHITECTURE.md §10](../ARCHITECTURE.md#10-keys--config-cheat-sheet).
 
 ---
 
@@ -265,5 +265,5 @@ Guide: [SUPABASE_SETUP.md](./SUPABASE_SETUP.md).
 |-----|-----|
 | [NEXT-STEPS.md](./NEXT-STEPS.md) | Current ship order |
 | [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) | DB + Storage setup |
-| [ARCHITECTURE.md §14](./ARCHITECTURE.md#14-deployment-sketch) | Mermaid sketch |
+| [ARCHITECTURE.md §14](../ARCHITECTURE.md#14-deployment-sketch) | Mermaid sketch |
 | [SCALING-AND-JOBS.md](./SCALING-AND-JOBS.md) | Queue, workers, scale replicas |

@@ -12,7 +12,7 @@ All reference docs live here. Updated Aug 24, 2026.
 
 | File | Use when |
 |------|----------|
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | How the system works (auth, storage, APIs, keys) |
+| [ARCHITECTURE.md](../ARCHITECTURE.md) | How the system works (auth, storage, APIs, keys) |
 | [SPEC.md](./SPEC.md) | Product scope, API shapes, master tracker |
 | [ENGINEERING-PRINCIPLES.md](./ENGINEERING-PRINCIPLES.md) | Coding rules |
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | Prod hosts, secrets, ship checklist |

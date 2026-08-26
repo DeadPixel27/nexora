@@ -2,7 +2,7 @@
 
 **One-liner:** Describe what you want done with your documents -> system builds and runs an AI agent pipeline automatically.
 
-> **Progress snapshot:** Launch stack live on Railway + Vercel (2026-08-24). Mailgun inbound ops skipped (no domain). Open work: real-doc testing + launch kit — [NEXT-STEPS.md](./NEXT-STEPS.md). System truth: [ARCHITECTURE.md](./ARCHITECTURE.md).
+> **Progress snapshot:** Launch stack live on Railway + Vercel (2026-08-24). Mailgun inbound ops skipped (no domain). Open work: real-doc testing + launch kit — [NEXT-STEPS.md](./NEXT-STEPS.md). System truth: [ARCHITECTURE.md](../ARCHITECTURE.md).
 
 
 **Documentation:** All reference docs live in [`docs/`](./README.md).
@@ -117,7 +117,7 @@ Step 5: Formatter (output: CSV with flag column)
 
 ## Architecture
 
-Full diagrams (system context, three-layer templates, pipeline flow, persistence registry): **[ARCHITECTURE.md](./ARCHITECTURE.md)**
+Full diagrams (system context, three-layer templates, pipeline flow, persistence registry): **[ARCHITECTURE.md](../ARCHITECTURE.md)**
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -141,7 +141,7 @@ Full diagrams (system context, three-layer templates, pipeline flow, persistence
 └───────────────────────────────────────────────────────────┘
 ```
 
-See also: [ARCHITECTURE.md](./ARCHITECTURE.md)
+See also: [ARCHITECTURE.md](../ARCHITECTURE.md)
 
 ---
 
@@ -388,8 +388,8 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 
 ### V2: Frontend + Backend redesign ✅ (merged to `develop`, 2026-08-08)
 
-- [x] Frontend V2 UI — compact home, 3-col results, export modals, workflow settings ([ARCHITECTURE.md](./ARCHITECTURE.md))
-- [x] Backend V2 — email, Sheets, inbound, workflow PATCH/settings ([ARCHITECTURE.md](./ARCHITECTURE.md))
+- [x] Frontend V2 UI — compact home, 3-col results, export modals, workflow settings ([ARCHITECTURE.md](../ARCHITECTURE.md))
+- [x] Backend V2 — email, Sheets, inbound, workflow PATCH/settings ([ARCHITECTURE.md](../ARCHITECTURE.md))
 - [x] Versioning simplification — workflow-only versions; refine creates child runs only
 - [x] `output.email` + `output.google_sheets` agents
 - [x] Migrations `008_inbound_addresses`, `009_workflow_delivery_defaults`; `schema.sql` synced
@@ -437,8 +437,8 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 | V1.1 | Email delivery (Resend) | Medium | ✅ Done — `output.email`, `POST /api/runs/{id}/email` |
 | V1.2 | Google Sheets push | Medium | ✅ Done — `output.google_sheets`, `POST /api/runs/{id}/sheets` |
 | V1.3 | Chat refinement + versioned user templates | High | ✅ Done — workflow versions only in V2 |
-| V2.0 | Frontend V2 redesign + export/settings UX | High | ✅ Done — [ARCHITECTURE.md](./ARCHITECTURE.md) |
-| V2.0 | Backend V2 delivery + inbound email | High | ✅ Done — [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| V2.0 | Frontend V2 redesign + export/settings UX | High | ✅ Done — [ARCHITECTURE.md](../ARCHITECTURE.md) |
+| V2.0 | Backend V2 delivery + inbound email | High | ✅ Done — [ARCHITECTURE.md](../ARCHITECTURE.md) |
 | V2.1 | Live PDF preview + field highlights | 6–10 hr | `docs/NEXT-STEPS.md` |
 | V2.1 | Auto-correct / learning from edits | Medium | `docs/NEXT-STEPS.md` |
 | V3.0 | Inbound reply-to-sender after run completes | Medium | partial — webhook runs workflow; no auto-reply yet; Mailgun ops skipped |
@@ -510,7 +510,7 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 
 | Status | Task | Doc |
 |--------|------|-----|
-| [x] | Three-layer model: master → run versions → workflow versions | [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| [x] | Three-layer model: master → run versions → workflow versions | [ARCHITECTURE.md](../ARCHITECTURE.md) |
 | [x] | `user_template_versions` + `refinement_events` tables (migration 007) | `supabase/migrations/007_*.sql` |
 | [x] | Supabase Storage bucket `user-templates` for payloads | [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) |
 | [x] | `POST /api/runs/{id}/refine` + version pointer dedup in Postgres | API |
@@ -523,10 +523,10 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 
 | Status | Version | Feature | Doc |
 |--------|---------|---------|-----|
-| [x] | V1.1 | Email delivery (Resend) — `output.email` agent | [ARCHITECTURE.md](./ARCHITECTURE.md) |
-| [x] | V1.2 | Google Sheets push — `output.google_sheets` | [ARCHITECTURE.md](./ARCHITECTURE.md) |
-| [x] | V1.3 | Chat refinement on results — `POST /api/runs/{id}/refine` | [ARCHITECTURE.md](./ARCHITECTURE.md) |
-| [x] | V2.0 | Frontend V2 + Backend V2 delivery APIs | [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| [x] | V1.1 | Email delivery (Resend) — `output.email` agent | [ARCHITECTURE.md](../ARCHITECTURE.md) |
+| [x] | V1.2 | Google Sheets push — `output.google_sheets` | [ARCHITECTURE.md](../ARCHITECTURE.md) |
+| [x] | V1.3 | Chat refinement on results — `POST /api/runs/{id}/refine` | [ARCHITECTURE.md](../ARCHITECTURE.md) |
+| [x] | V2.0 | Frontend V2 + Backend V2 delivery APIs | [ARCHITECTURE.md](../ARCHITECTURE.md) |
 | [ ] | V2.1 | Live PDF preview + field highlights | [NEXT-STEPS.md](./NEXT-STEPS.md) |
 | [ ] | V2.1 | Auto-correct / learning from user edits | [NEXT-STEPS.md](./NEXT-STEPS.md) |
 | [ ] | V3.0 | Inbound email auto-reply to sender | partial webhook in V2 |
@@ -536,8 +536,8 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 
 | Status | Agent type | Version | Doc |
 |--------|------------|---------|-----|
-| [x] | `output.email` | V1.1 | [ARCHITECTURE.md](./ARCHITECTURE.md) |
-| [x] | `output.google_sheets` | V1.2 | [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| [x] | `output.email` | V1.1 | [ARCHITECTURE.md](../ARCHITECTURE.md) |
+| [x] | `output.google_sheets` | V1.2 | [ARCHITECTURE.md](../ARCHITECTURE.md) |
 | [ ] | `transform.summarizer` | V1.3 | [AGENTS.md](./AGENTS.md) |
 | [ ] | `transform.classifier` | V2.0 | [AGENTS.md](./AGENTS.md) |
 | [ ] | `processor.table_extract` | V2.0 | [AGENTS.md](./AGENTS.md) |
@@ -553,8 +553,8 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 | [ ] | SSE / WebSockets for run status (replace polling) | GAPS #11 (done) |
 | [ ] | S3 document backend (registry ready) | SPEC Future |
 | [ ] | `global-error.tsx` (optional) | GAPS #10 (done) |
-| [x] | Chat refinement: cache OCR text on run for partial re-run | [ARCHITECTURE.md](./ARCHITECTURE.md) |
-| [x] | Chat refinement: `parent_run_id` lineage column | [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| [x] | Chat refinement: cache OCR text on run for partial re-run | [ARCHITECTURE.md](../ARCHITECTURE.md) |
+| [x] | Chat refinement: `parent_run_id` lineage column | [ARCHITECTURE.md](../ARCHITECTURE.md) |
 
 ### Completed (reference)
 
