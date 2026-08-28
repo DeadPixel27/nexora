@@ -51,6 +51,15 @@ Collect these before you open any dashboard:
 
 > Never use the `anon` / `publishable` key on the backend. Only the `sb_secret_…` key.
 
+### Already deployed (existing Supabase project)
+
+If prod was created from an older `schema.sql` (before `017`), **do not** re-run the full consolidated schema. Apply only the incremental migration:
+
+1. SQL Editor → run [`backend/supabase/migrations/017_enable_rls.sql`](../backend/supabase/migrations/017_enable_rls.sql) → `Success`
+2. Dashboard → **Database** → **Tables** → RLS warnings should clear
+
+New projects get RLS from `schema.sql` step above; `017` is only for live DBs that predate it.
+
 ---
 
 ## Phase 2 — Google Cloud / OAuth (~30 min)

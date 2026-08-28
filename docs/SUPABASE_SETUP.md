@@ -10,11 +10,11 @@ Follow these steps to persist users, workflows, and runs in Postgres (survives s
 
 ## 2. Run the schema
 
-Keep numbered files under [`backend/supabase/migrations/`](../backend/supabase/migrations/) (`001`–`016`). Do **not** squash them into one dump — they are the history for existing databases.
+Keep numbered files under [`backend/supabase/migrations/`](../backend/supabase/migrations/) (`001`–`017`). Do **not** squash them into one dump — they are the history for existing databases.
 
 **New project (recommended):** three SQL Editor runs, not sixteen:
 
-1. [`backend/supabase/schema.sql`](../backend/supabase/schema.sql) — current tables through `016_audit_events`
+1. [`backend/supabase/schema.sql`](../backend/supabase/schema.sql) — current tables through `017_enable_rls` (includes RLS)
 2. [`backend/supabase/seed_templates.sql`](../backend/supabase/seed_templates.sql) — pipeline template catalog
 3. [`backend/supabase/migrations/013_storage_private.sql`](../backend/supabase/migrations/013_storage_private.sql) — private `documents` + `user-templates` buckets and client deny policy
 
@@ -34,7 +34,7 @@ Tables created:
 
 ### Existing projects — run migrations
 
-If the project already had an older schema, apply numbered files under [`backend/supabase/migrations/`](../backend/supabase/migrations/) in order through `016_audit_events.sql` instead of re-running the full `schema.sql`.
+If the project already had an older schema, apply numbered files under [`backend/supabase/migrations/`](../backend/supabase/migrations/) in order through `017_enable_rls.sql` instead of re-running the full `schema.sql`.
 
 > Older note: [`002_add_users_and_run_document_ids.sql`](../backend/supabase/migrations/002_add_users_and_run_document_ids.sql) was the first incremental migration for very early schemas.
 
@@ -159,6 +159,7 @@ Without Supabase, data is in-memory and lost on restart.
 | `relation "users" does not exist` | Run `schema.sql` in SQL Editor |
 | `Invalid API key` | Use **secret** key, not publishable |
 | `degraded` status | Run `python scripts/verify_supabase.py` for details |
+| RLS disabled warning in Dashboard | Run [`017_enable_rls.sql`](../backend/supabase/migrations/017_enable_rls.sql) in SQL Editor (no policies needed — service role bypasses RLS) |
 | RLS errors on backend | Backend uses service role key; Storage/Postgres RLS is bypassed for that key |
 | `must be owner of table objects` | Do not `ALTER TABLE storage.objects` (RLS is already on). Re-run the current `013_storage_private.sql`. If `CREATE POLICY` still fails, run only the `storage.buckets` upsert block (sets `public=false`) and manage policies in Dashboard → Storage → Policies (empty allow-list = deny for anon) |
 | `Bucket not found` | Create `documents` / `user-templates` or run `013_storage_private.sql` |

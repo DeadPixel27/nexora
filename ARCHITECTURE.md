@@ -281,7 +281,7 @@ Scalar row fields only — nested `transactions[]` rules are deferred ([SCALING-
 
 ## 5. Database — ER & table catalog
 
-**Source of truth:** [`backend/supabase/schema.sql`](./backend/supabase/schema.sql) for fresh installs + incremental [`backend/supabase/migrations/`](./backend/supabase/migrations/) (`001`–`016`) for existing DBs.
+**Source of truth:** [`backend/supabase/schema.sql`](./backend/supabase/schema.sql) for fresh installs + incremental [`backend/supabase/migrations/`](./backend/supabase/migrations/) (`001`–`017`) for existing DBs.
 
 **Footnote — schema drift:** column `workflow_runs.transient_refinement` exists in migration `006` but is not in `schema.sql`. Prefer migrations when upgrading a live project; sync `schema.sql` when convenient.
 
@@ -451,6 +451,7 @@ Soft links (`parent_template_id`, `template_id`) are **text**, not FKs — maste
 | 014 | `workflows.default_sheet_name` |
 | 015 | `waitlist.feedback` |
 | 016 | `audit_events` |
+| 017 | RLS enabled on all app tables (no client policies) |
 
 ---
 

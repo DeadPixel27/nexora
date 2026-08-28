@@ -208,3 +208,19 @@ create table if not exists uploads (
 
 create index if not exists idx_uploads_user_id on uploads(user_id);
 
+-- RLS: backend-only access via service role (see migrations/017_enable_rls.sql)
+alter table users enable row level security;
+alter table workflows enable row level security;
+alter table workflow_steps enable row level security;
+alter table workflow_runs enable row level security;
+alter table workflow_step_runs enable row level security;
+alter table pipeline_templates enable row level security;
+alter table user_template_versions enable row level security;
+alter table refinement_events enable row level security;
+alter table inbound_addresses enable row level security;
+alter table usage_events enable row level security;
+alter table waitlist enable row level security;
+alter table analytics_events enable row level security;
+alter table audit_events enable row level security;
+alter table uploads enable row level security;
+
