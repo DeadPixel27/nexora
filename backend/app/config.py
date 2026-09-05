@@ -169,6 +169,17 @@ class Settings(BaseSettings):
             return ",".join(str(item).strip() for item in value if str(item).strip())
         return str(value) if value is not None else "http://localhost:3000"
 
+    @field_validator("otel_enabled", "rag_enabled", "log_payloads", "auth_allow_email", mode="before")
+    @classmethod
+    def _empty_env_bool_as_false(cls, value: object) -> object:
+        """Railway often sets FLAG= with an empty string — treat as unset/false."""
+        if value is None:
+            return False
+        if isinstance(value, str) and value.strip() == "":
+            return False
+        return value
+
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
