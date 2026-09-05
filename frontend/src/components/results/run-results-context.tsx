@@ -16,7 +16,7 @@ import { Loader2 } from "lucide-react";
 import { type SaveAction } from "@/components/export-bar";
 import { UsageLimitModal } from "@/components/modals/usage-limit-modal";
 import { RunResultsFrame } from "@/components/results/run-results-frame";
-import { RefineChatPanel } from "@/components/refine-chat";
+import { ResultsSidePanel } from "@/components/results/results-side-panel";
 import type { RunResponse } from "@/lib/api";
 
 export interface RunResultsPageConfig {
@@ -181,12 +181,11 @@ export function RunResultsShell({
         <RunResultsFrame
           refinePanel={
             hasCompletedResults ? (
-              <RefineChatPanel
+              <ResultsSidePanel
                 runId={activeRunId}
                 chatSessionKey={chatSessionKeyRef.current}
                 disabled={refineDisabled}
                 saveAction={pageConfig.saveAction ?? "workflow"}
-                variant="panel"
                 onRefined={(newRunId) => handleRefined(newRunId)}
                 onUsageLimit={(message) => {
                   setUsageLimitMsg(message);

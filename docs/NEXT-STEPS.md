@@ -1,7 +1,7 @@
 # Nexora — Next Steps
 
-**Updated:** 2026-08-24  
-**Branch:** `develop`
+**Updated:** 2026-09-05  
+**Branch:** `feature/interview-signals`
 
 Launch product (V2/V3 + auth/metering) is built. Stack is live on Railway + Vercel. Remaining work below.
 
@@ -13,8 +13,9 @@ Launch product (V2/V3 + auth/metering) is built. Stack is live on Railway + Verc
 |---|------|------|-------|
 | 1 | ~~**Hard usage caps per feature**~~ | done | Pages/extract, refine (cap + out-of-scope refuse), email/Sheets HTTP + agents; clear 429 modal; account shows outbound bars. |
 | 2 | ~~**Deploy**~~ | done | Supabase + Upstash Redis + Railway API + Worker + Vercel. API: `https://nexora-api-production-065e.up.railway.app`. Mailgun inbound **skipped** (needs a domain you control — Railway `*.up.railway.app` is HTTP only). See [DEPLOYMENT.md](./DEPLOYMENT.md). |
-| 3 | **Real-doc testing** | ~3h | 3–5 docs each: invoice, receipt, resume. Score accuracy before extra hardening. |
-| 4 | **Launch kit** | ~2h | 60s Loom + Reddit / IH / HN drafts + README screenshots + live Vercel URL. |
+| 3 | **Interview signals** | in PR | Eval harness + OTel + RAG — [NEXORA-INTERVIEW-SIGNALS.md](./NEXORA-INTERVIEW-SIGNALS.md). Apply migrations `018`/`019`; set `RAG_ENABLED` / `OTEL_*` as needed. |
+| 4 | **Real-doc testing** | ~3h | 3–5 docs each: invoice, receipt, resume. Score accuracy before extra hardening. |
+| 5 | **Launch kit** | ~2h | 60s Loom + Reddit / IH / HN drafts + README screenshots + live Vercel URL. |
 
 ---
 
@@ -86,4 +87,4 @@ Until this exists, keep files and results for MVP (history + user refine). No 24
 
 ## Immediate next action
 
-**Real-doc testing** (#3), then launch kit (#4). Do not buy a domain or wire Mailgun for this CV demo.
+Land **interview signals** (evals / OTel / RAG) — see [NEXORA-INTERVIEW-SIGNALS.md](./NEXORA-INTERVIEW-SIGNALS.md). Then real-doc testing (#4) and launch kit (#5). Do not buy a domain or wire Mailgun for this CV demo.

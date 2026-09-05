@@ -369,9 +369,8 @@ export function RefineChatPanel({
 
   if (variant === "panel") {
     return (
-      <aside className="w-full lg:w-[340px] shrink-0 flex flex-col border-t lg:border-t-0 lg:border-l border-border bg-card min-h-0 max-h-[42vh] lg:max-h-none">
-        <div className="shrink-0 p-4 border-b border-border space-y-2">
-          <h2 className="font-serif text-base font-semibold">Refine</h2>
+      <div className="flex flex-1 flex-col min-h-0 min-w-0">
+        <div className="shrink-0 px-4 py-3 border-b border-border space-y-2">
           <p className="text-xs text-muted-foreground">
             Tell me what to change — I&apos;ll plan first, then apply to all
             documents in this run.
@@ -380,7 +379,7 @@ export function RefineChatPanel({
         </div>
         {chatMessages}
         {inputArea}
-      </aside>
+      </div>
     );
   }
 

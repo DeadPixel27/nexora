@@ -27,6 +27,8 @@ from app.models.api.runs import (
     RunAdhocRequest,
     RefinePlanRequest,
     RefinePlanResponse,
+    RunDocChatRequest,
+    RunDocChatResponse,
     RunRefineRequest,
     RunRefineResponse,
     RunRequest,
@@ -402,6 +404,43 @@ async def refine_run(
         metadata={"parent_run_id": run_id},
     )
     return RunRefineResponse(run=to_run_response(run), refine_summary=summary)
+
+
+@router.post("/{run_id}/chat", response_model=RunDocChatResponse)
+@limiter.limit(settings.rate_limit_refine_plan)
+async def chat_run_documents(
+    request: Request,
+    run_id: str,
+    body: RunDocChatRequest,
+    repo: RepoDep,
+    current_user: CurrentUserDep,
+) -> RunDocChatResponse:
+    """Ask a question over this run's indexed document text (RAG)."""
+    from app.api.ownership import require_run_access
+    from app.services.llm.openai_cost import OpenAIBudgetError
+    from app.services.rag import chat_over_run
+
+    run = repo.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+    await require_run_access(run, current_user, repo)
+    if run.status != "completed":
+        raise HTTPException(
+            status_code=400,
+            detail="Document chat is only available after the run completes.",
+        )
+    try:
+        result = await chat_over_run(run_id=run_id, question=body.question)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except OpenAIBudgetError as e:
+        raise HTTPException(status_code=429, detail=str(e)) from e
+    except Exception as e:
+        logger.exception("RAG chat failed run_id=%s", run_id)
+        raise HTTPException(status_code=502, detail="Document chat failed") from e
+    return RunDocChatResponse(**result)
 
 
 @router.get("/{run_id}", response_model=RunResponse)

@@ -1,6 +1,6 @@
 # Nexora — Scaling, Jobs & Future Ops
 
-**Updated:** 2026-08-24  
+**Updated:** 2026-09-05  
 **Audience:** ops + architecture for API replicas, workers, and extraction scale.
 
 This doc captures decisions so we do **not** reopen them casually during ship week. For near-term product tasks see [NEXT-STEPS.md](./NEXT-STEPS.md).
@@ -104,9 +104,28 @@ See sections below for page limits and cost ops.
 
 ---
 
+## Later: eval, tracing & retrieval (hiring-driven)
+
+See also [NEXORA-INTERVIEW-SIGNALS.md](./NEXORA-INTERVIEW-SIGNALS.md) for Phase 1 acceptance criteria.
+
+| Item | Current behavior | Why deferred / status | Trigger to build | Preferred approach |
+|------|------------------|----------------------|------------------|--------------------|
+| **Eval run storage** | **Shipped (Phase 1):** `eval_runs` / `eval_run_items` + `POST /api/admin/evals/run`. Golden set ≤10 docs, inline. | — | — | Postgres (done). API strips expected/actual by default |
+| **Eval runs as queued jobs** | Still inline | Full corpus would block a request / burn budget | When golden set exceeds ~10 documents | Enqueue via `schedule_run()` with a distinct job type — **no second queue**. Respect `OPENAI_DAILY_BUDGET_USD` |
+| **Per-step tracing (OTel)** | **Shipped (Phase 1):** `OTEL_ENABLED` wraps each DAG step; metadata only | Sampling / multi-replica volume still open | Before multi-replica API | Keep metadata-only; add sampling ratio env when trace volume grows |
+| **Cost-per-run surfaced in UI** | `openai_cost` day totals are in-process | Needs shared-counter fix for multi-replica | Alongside tracing polish | Persist per-run cost **on the run row** |
+| **Model routing (cheap vs frontier)** | Single GPT-4o call per batch | Quality not yet validated | Once eval baseline is trusted | Route on template complexity; measure delta on golden set |
+| **RAG / PGVector chat** | **Shipped (Phase 1):** migration `019`, index-on-complete, lazy index on chat if chunks missing, `POST /api/runs/{id}/chat`, results UI. Off until `RAG_ENABLED=true` | Hybrid search / re-rank deferred. **Local caveat:** if local API shares Upstash Redis with Railway, the **production worker** may finish the job without RAG — chat lazy-indexes from `cached_documents` as a fallback | Product demand | Stay on Supabase PGVector; embeddings under same daily budget. For pure local RAG testing, unset `REDIS_URL` so runs execute in-process |
+| **MCP server exposing extraction as a tool** | Not built | No product need | Only if the job search shows it converting | Read-only wrapper; same rate limits + page metering |
+
+**Cross-cutting note:** eval sweeps and embedding backfills add OpenAI spend outside user extractions. The in-process daily counter still cannot see across API replicas. **Move OpenAI spend accounting to Postgres before adding a second API replica.**
+
+---
+
 ## Triggers: when to scale further
 
 - Scale **workers** 1 → 3 when concurrent extractions queue up (Reddit).
 - Add **Redis cache** for OpenAI budget / rate limits when running **>1 API** replica.
-- Raise per-file page limits / chunked extract when users hit the 10-page reject often.
+- Move **OpenAI spend accounting to Postgres** before a second API replica if eval sweeps, embedding backfills, or MCP-triggered runs ship (see eval/tracing/retrieval section).
+- Raise per-file page limits / chunked extract when users hit the 10-page reject often. **Note:** once RAG ships, raising the page limit multiplies embedding spend as well as extraction spend.
 - Consider Kafka (or similar) only as an **event bus** when multiple systems must independently consume/replay run events — not as a replacement for the Arq job queue.

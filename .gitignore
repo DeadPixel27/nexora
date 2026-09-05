@@ -48,5 +48,6 @@ backend/secrets/
 *.pem
 *credentials*.json
 
-# Personal CV (local only)
+# Personal CV (local only — never commit)
+cv/
 cv.tex

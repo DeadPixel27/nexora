@@ -190,73 +190,81 @@ async def execute_run(run_id: str) -> None:
     with track_duration() as duration:
         try:
             for index, step in enumerate(planned):
-                if has_cached_text and step.agent_type in _PROCESSOR_AGENTS:
+                from app.services.observability import agent_step_span, mark_span_skipped
+
+                with agent_step_span(
+                    agent_type=step.agent_type,
+                    run_id=run_id,
+                    step_order=step.step_order,
+                ) as span:
+                    if has_cached_text and step.agent_type in _PROCESSOR_AGENTS:
+                        mark_span_skipped(span)
+                        step_runs[index] = replace(
+                            step_runs[index],
+                            status="skipped",
+                            output={"skipped": True, "reason": "cached_document_text"},
+                        )
+                        save_run(replace(run, steps=step_runs))
+                        continue
+
+                    logger.info(
+                        "Run %s — step %d: %s",
+                        run_id,
+                        step.step_order,
+                        step.agent_type,
+                    )
                     step_runs[index] = replace(
                         step_runs[index],
-                        status="skipped",
-                        output={"skipped": True, "reason": "cached_document_text"},
+                        status="running",
+                        error_message=None,
                     )
                     save_run(replace(run, steps=step_runs))
-                    continue
 
-                logger.info(
-                    "Run %s — step %d: %s",
-                    run_id,
-                    step.step_order,
-                    step.agent_type,
-                )
-                step_runs[index] = replace(
-                    step_runs[index],
-                    status="running",
-                    error_message=None,
-                )
-                save_run(replace(run, steps=step_runs))
-
-                handler = get_handler(step.agent_type)
-                result = await handler.execute(ctx, step.config)
-                step_runs[index] = replace(
-                    step_runs[index],
-                    status="completed",
-                    output=result.output,
-                )
-
-                if step.agent_type == "transform.field_extractor":
-                    from app.services.pipeline.refine_logging import log_field_snapshot
-
-                    instructions = str(step.config.get("instructions") or "")
-                    rows = ctx.data.get("rows", [])
-                    logger.info(
-                        "[refine] execute field_extractor run_id=%s parent_run_id=%s "
-                        "instructions_len=%d row_count=%d",
-                        run_id,
-                        run.parent_run_id,
-                        len(instructions),
-                        len(rows),
+                    handler = get_handler(step.agent_type)
+                    result = await handler.execute(ctx, step.config)
+                    step_runs[index] = replace(
+                        step_runs[index],
+                        status="completed",
+                        output=result.output,
                     )
-                    for row in rows[:3]:
-                        yoe_key = "years_of_experience"
-                        field_filter = (
-                            {yoe_key}
-                            if yoe_key in row or yoe_key in step.config.get("fields", [])
-                            else None
-                        )
-                        log_field_snapshot(
-                            logger,
-                            "execute-extract-result",
-                            run_id=run_id,
-                            document_id=str(row.get("document_id", "")),
-                            fields=row,
-                            field_filter=field_filter,
-                        )
 
-                cached = _snapshot_documents(ctx.data.get("documents", []))
-                save_run(
-                    replace(
-                        run,
-                        steps=step_runs,
-                        cached_documents=cached,
+                    if step.agent_type == "transform.field_extractor":
+                        from app.services.pipeline.refine_logging import log_field_snapshot
+
+                        instructions = str(step.config.get("instructions") or "")
+                        rows = ctx.data.get("rows", [])
+                        logger.info(
+                            "[refine] execute field_extractor run_id=%s parent_run_id=%s "
+                            "instructions_len=%d row_count=%d",
+                            run_id,
+                            run.parent_run_id,
+                            len(instructions),
+                            len(rows),
+                        )
+                        for row in rows[:3]:
+                            yoe_key = "years_of_experience"
+                            field_filter = (
+                                {yoe_key}
+                                if yoe_key in row or yoe_key in step.config.get("fields", [])
+                                else None
+                            )
+                            log_field_snapshot(
+                                logger,
+                                "execute-extract-result",
+                                run_id=run_id,
+                                document_id=str(row.get("document_id", "")),
+                                fields=row,
+                                field_filter=field_filter,
+                            )
+
+                    cached = _snapshot_documents(ctx.data.get("documents", []))
+                    save_run(
+                        replace(
+                            run,
+                            steps=step_runs,
+                            cached_documents=cached,
+                        )
                     )
-                )
 
         except Exception as e:
             logger.exception("Run %s failed at step %s", run_id, step.agent_type)
@@ -334,6 +342,16 @@ async def execute_run(run_id: str) -> None:
         cached_documents=_snapshot_documents(ctx.data.get("documents", [])),
     )
     save_run(completed_run)
+    try:
+        from app.services.rag import index_run_documents
+
+        await index_run_documents(
+            run_id=run_id,
+            user_id=user_id,
+            documents=completed_run.cached_documents or [],
+        )
+    except Exception:
+        logger.warning("RAG index hook failed for run=%s", run_id, exc_info=True)
     try:
         await log_event(
             "run_completed",

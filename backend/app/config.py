@@ -135,6 +135,18 @@ class Settings(BaseSettings):
     # Job queue — Redis URL enables Arq workers (empty = in-process asyncio fallback)
     redis_url: str = ""
 
+    # OpenTelemetry — metadata-only step spans (never document payloads)
+    otel_enabled: bool = False
+    otel_service_name: str = "nexora-api"
+    otel_exporter_otlp_endpoint: str = ""
+
+    # RAG over run document text (requires migration 019 + pgvector)
+    rag_enabled: bool = False
+    rag_embedding_model: str = "text-embedding-3-small"
+    rag_chunk_size: int = 800
+    rag_chunk_overlap: int = 100
+    rag_top_k: int = 6
+
     # Comma-separated origins for CORS (e.g. http://localhost:3000,https://app.vercel.app)
     cors_origins: str = "http://localhost:3000"
 
