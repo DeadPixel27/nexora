@@ -439,6 +439,30 @@ export async function getRun(runId: string): Promise<RunResponse> {
   return request<RunResponse>(`/api/runs/${runId}`);
 }
 
+export interface DocChatCitation {
+  filename: string;
+  document_id: string;
+  chunk_index: number | null;
+  similarity: number | null;
+  snippet: string;
+}
+
+export interface DocChatResponse {
+  answer: string;
+  citations: DocChatCitation[];
+}
+
+export async function chatRunDocuments(
+  runId: string,
+  question: string,
+): Promise<DocChatResponse> {
+  return request<DocChatResponse>(`/api/runs/${runId}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
+}
+
 export async function getWorkflowTemplateVersions(
   workflowId: string,
 ): Promise<TemplateVersionSummary[]> {

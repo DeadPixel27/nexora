@@ -56,6 +56,11 @@ google-auth>=2.20.0
 arq>=0.26.0
 redis>=5.0.0
 
+# OpenTelemetry (optional at runtime; enabled via OTEL_ENABLED)
+opentelemetry-api>=1.27.0
+opentelemetry-sdk>=1.27.0
+opentelemetry-exporter-otlp-proto-http>=1.27.0
+
 # Tests
 pytest==8.3.4
 pytest-asyncio==0.25.2

@@ -67,6 +67,23 @@ class RunAdhocRequest(BaseModel):
     task_description: str = Field(min_length=1)
 
 
+class RunDocChatRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+
+
+class RunDocChatCitation(BaseModel):
+    filename: str = ""
+    document_id: str = ""
+    chunk_index: Optional[int] = None
+    similarity: Optional[float] = None
+    snippet: str = ""
+
+
+class RunDocChatResponse(BaseModel):
+    answer: str
+    citations: list[RunDocChatCitation] = Field(default_factory=list)
+
+
 class StepRunResponse(BaseModel):
     step_order: int
     agent_type: str

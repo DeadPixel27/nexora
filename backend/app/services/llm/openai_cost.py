@@ -28,6 +28,9 @@ _MODEL_PRICES_PER_M: dict[str, tuple[float, float]] = {
     "gpt-4.1": (2.00, 8.00),
     "gpt-4.1-mini": (0.40, 1.60),
     "gpt-4.1-nano": (0.10, 0.40),
+    # Embeddings: (input, output) — output unused; keep 0
+    "text-embedding-3-small": (0.02, 0.0),
+    "text-embedding-3-large": (0.13, 0.0),
 }
 
 _DEFAULT_PRICES = (2.50, 10.00)  # assume gpt-4o-class if unknown
