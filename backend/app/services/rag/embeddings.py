@@ -30,10 +30,13 @@ def _get_client() -> AsyncOpenAI:
     return _client
 
 
-async def embed_texts(texts: list[str]) -> list[list[float]]:
-    """Embed strings with text-embedding-3-small (1536 dims)."""
+async def embed_texts(texts: list[str]) -> tuple[list[list[float]], int]:
+    """Embed strings with text-embedding-3-small (1536 dims).
+
+    Returns ``(embeddings, prompt_tokens)``.
+    """
     if not texts:
-        return []
+        return [], 0
     check_openai_budget_allowed()
     model = settings.rag_embedding_model
     client = _get_client()
@@ -56,4 +59,4 @@ async def embed_texts(texts: list[str]) -> list[list[float]]:
 
     # Ensure order matches input
     by_index = sorted(response.data, key=lambda d: d.index)
-    return [list(item.embedding) for item in by_index]
+    return [list(item.embedding) for item in by_index], prompt_tokens

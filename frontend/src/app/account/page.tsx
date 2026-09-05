@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useUser } from "@/hooks/use-user";
 import { ApiError, getIntegrationsStatus, getUserUsage, updateMyProfile, type IntegrationsStatus, type UsageSummary } from "@/lib/api";
-import { FREE_EMAILS_PER_MONTH, FREE_PAGES_PER_MONTH, FREE_SHEETS_PER_MONTH } from "@/lib/free-plan";
+import { FREE_EMAILS_PER_MONTH, FREE_PAGES_PER_MONTH, FREE_RAG_TOKENS_PER_MONTH, FREE_SHEETS_PER_MONTH } from "@/lib/free-plan";
 import { hasPendingRun } from "@/lib/pending-run";
 import { resumePendingRun } from "@/lib/resume-pending-run";
 import { toastError, toastSuccess } from "@/lib/toast";
@@ -65,7 +65,7 @@ function UsageBar({ label, used, limit }: { label: string; used: number; limit: 
       <div className="flex justify-between text-xs">
         <span>{label}</span>
         <span className="text-muted-foreground tabular-nums">
-          {used}/{limit}
+          {used.toLocaleString()}/{limit.toLocaleString()}
         </span>
       </div>
       <div className="h-1.5 rounded-sm bg-muted overflow-hidden">
@@ -353,6 +353,11 @@ export default function AccountPage() {
                 label="Sheets pushes"
                 used={usage?.sheets_used ?? 0}
                 limit={usage?.sheets_limit ?? FREE_SHEETS_PER_MONTH}
+              />
+              <UsageBar
+                label="Ask-docs tokens"
+                used={usage?.rag_tokens_used ?? 0}
+                limit={usage?.rag_tokens_limit ?? FREE_RAG_TOKENS_PER_MONTH}
               />
             </div>
             {usage && usage.pages_used >= usage.pages_limit && (

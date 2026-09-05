@@ -6,6 +6,7 @@ Global daily cap: 100 pages/day across all users (budget protection).
 OpenAI USD budget: estimated spend gate (see openai_cost / OPENAI_DAILY_BUDGET_USD).
 Refine limit: 10 refinements per run.
 Outbound: 20 emails / 20 Sheets pushes per user per month (separate from pages).
+RAG chat: 100k OpenAI tokens/month (embed + answer; separate from pages).
 """
 
 from __future__ import annotations
@@ -25,7 +26,10 @@ _memory_usage_events: list[dict[str, Any]] = []
 
 EMAIL_EVENT_TYPE = "email_sent"
 SHEETS_EVENT_TYPE = "sheets_push"
-OUTBOUND_EVENT_TYPES = frozenset({EMAIL_EVENT_TYPE, SHEETS_EVENT_TYPE})
+RAG_CHAT_EVENT_TYPE = "rag_chat"
+OUTBOUND_EVENT_TYPES = frozenset(
+    {EMAIL_EVENT_TYPE, SHEETS_EVENT_TYPE, RAG_CHAT_EVENT_TYPE}
+)
 
 # In-process locks (single-replica launch). Multi-replica needs DB locks later.
 _global_usage_lock = asyncio.Lock()
@@ -193,7 +197,14 @@ async def check_outbound_allowed(
     """Raise UsageLimitError if outbound monthly cap would be exceeded."""
     used = await get_user_outbound_usage_this_month(user_id, event_type)
     if used + units > limit:
-        label = "emails" if event_type == EMAIL_EVENT_TYPE else "Sheets pushes"
+        if event_type == EMAIL_EVENT_TYPE:
+            label = "emails"
+        elif event_type == SHEETS_EVENT_TYPE:
+            label = "Sheets pushes"
+        elif event_type == RAG_CHAT_EVENT_TYPE:
+            label = "Ask-docs tokens"
+        else:
+            label = "units"
         logger.info(
             "User %s hit outbound limit type=%s: %d + %d > %d",
             user_id,
@@ -465,6 +476,9 @@ async def get_usage_summary(user_id: str) -> dict:
     pages_used = await get_user_usage_this_month(user_id)
     emails_used = await get_user_outbound_usage_this_month(user_id, EMAIL_EVENT_TYPE)
     sheets_used = await get_user_outbound_usage_this_month(user_id, SHEETS_EVENT_TYPE)
+    rag_tokens_used = await get_user_outbound_usage_this_month(
+        user_id, RAG_CHAT_EVENT_TYPE
+    )
 
     return {
         "pages_used": pages_used,
@@ -473,6 +487,8 @@ async def get_usage_summary(user_id: str) -> dict:
         "emails_limit": settings.free_email_limit_monthly,
         "sheets_used": sheets_used,
         "sheets_limit": settings.free_sheets_limit_monthly,
+        "rag_tokens_used": rag_tokens_used,
+        "rag_tokens_limit": settings.free_rag_token_limit_monthly,
         "resets_at": next_month.isoformat(),
     }
 

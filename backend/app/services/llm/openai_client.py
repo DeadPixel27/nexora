@@ -107,7 +107,8 @@ async def complete_json(
     model: Optional[str] = None,
     json_schema: Optional[dict[str, Any]] = None,
     return_logprobs: bool = False,
-) -> Union[dict[str, Any], LLMResult]:
+    return_usage: bool = False,
+) -> Union[dict[str, Any], LLMResult, tuple[dict[str, Any], int]]:
     """
     Call OpenAI and parse the response as JSON.
 
@@ -117,7 +118,12 @@ async def complete_json(
 
     If return_logprobs=True, returns LLMResult with both parsed JSON and
     token logprobs (for confidence scoring). Otherwise returns dict.
+    If return_usage=True, returns ``(parsed, total_tokens)`` (not combined
+    with return_logprobs).
     """
+    if return_logprobs and return_usage:
+        raise ValueError("return_logprobs and return_usage cannot both be True")
+
     check_openai_budget_allowed()
 
     client = _get_client()
@@ -154,11 +160,14 @@ async def complete_json(
             raw = response.choices[0].message.content or "{}"
             try:
                 parsed = json.loads(raw)
+                total_tokens = int(estimate.total_tokens) if estimate is not None else 0
                 if return_logprobs:
                     token_logprobs = None
                     if response.choices[0].logprobs and response.choices[0].logprobs.content:
                         token_logprobs = response.choices[0].logprobs.content
                     return LLMResult(parsed=parsed, logprobs=token_logprobs)
+                if return_usage:
+                    return parsed, total_tokens
                 return parsed
             except json.JSONDecodeError as e:
                 last_exc = RuntimeError("LLM returned invalid JSON")

@@ -662,6 +662,8 @@ export interface UsageSummary {
   emails_limit?: number;
   sheets_used?: number;
   sheets_limit?: number;
+  rag_tokens_used?: number;
+  rag_tokens_limit?: number;
   resets_at: string | null;
 }
 

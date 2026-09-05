@@ -82,6 +82,7 @@ class RunDocChatCitation(BaseModel):
 class RunDocChatResponse(BaseModel):
     answer: str
     citations: list[RunDocChatCitation] = Field(default_factory=list)
+    tokens_used: int = 0
 
 
 class StepRunResponse(BaseModel):

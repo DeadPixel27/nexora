@@ -5,10 +5,10 @@
 | | |
 |---|---|
 | **Product** | Nexora — upload documents, describe a task (or pick a template), run an AI agent pipeline, get structured rows, refine via chat, optionally save as a reusable workflow |
-| **Stack** | Next.js (App Router) ↔ FastAPI ↔ Groq (plan/refine) + OpenAI GPT-4o (extract) + RapidOCR/Tesseract ↔ Supabase Postgres + Storage |
+| **Stack** | Next.js (App Router) ↔ FastAPI ↔ Groq (plan/refine) + OpenAI GPT-4o (extract) + RapidOCR/Tesseract ↔ Supabase Postgres (+ pgvector) + Storage |
 | **Repos** | [`backend/`](./backend/), [`frontend/`](./frontend/) |
 | **Related** | Product/API detail: [SPEC.md](./docs/SPEC.md) · Engineering rules: [ENGINEERING-PRINCIPLES.md](./docs/ENGINEERING-PRINCIPLES.md) · Next work: [NEXT-STEPS.md](./docs/NEXT-STEPS.md) |
-| **Last updated** | 2026-08-24 |
+| **Last updated** | 2026-09-05 |
 
 ---
 
@@ -33,7 +33,7 @@
 
 ## 1. Elevator pitch & mental model
 
-**What it does:** A user uploads PDFs/images (invoices, receipts, resumes, etc.), picks a **template** or writes a plain-English **task**. The backend **plans** a short agent pipeline (OCR/text → LLM field extract → **deterministic normalize** → rules → format), **runs** it asynchronously, and the UI **polls** until structured rows appear. The user can **refine** extraction in chat (creates a versioned child run), **save as a workflow** for reuse, and optionally deliver via **email** or **Google Sheets**. **Inbound email** (Mailgun → `flow-…@` workflow address) is **built** (HMAC webhook + Workflow Settings UI) but **ops-off** on the CV deploy until we own a receiving domain.
+**What it does:** A user uploads PDFs/images (invoices, receipts, resumes, etc.), picks a **template** or writes a plain-English **task**. The backend **plans** a short agent pipeline (OCR/text → LLM field extract → **deterministic normalize** → rules → format), **runs** it asynchronously, and the UI **polls** until structured rows appear. The user can **refine** extraction in chat (creates a versioned child run), **Ask docs** (RAG over that run’s text via PGVector), **save as a workflow** for reuse, and optionally deliver via **email** or **Google Sheets**. **Inbound email** (Mailgun → `flow-…@` workflow address) is **built** (HMAC webhook + Workflow Settings UI) but **ops-off** on the CV deploy until we own a receiving domain.
 
 **One-line architecture:**
 
@@ -209,6 +209,9 @@ flowchart TB
     S4["usage metering openai_cost"]
     S5["email sheets inbound"]
     S6["llm router openai groq"]
+    S7["rag chat embeddings index"]
+    S8["evals harness store"]
+    S9["observability tracing"]
   end
 
   subgraph agents [Agents]
@@ -281,7 +284,7 @@ Scalar row fields only — nested `transactions[]` rules are deferred ([SCALING-
 
 ## 5. Database — ER & table catalog
 
-**Source of truth:** [`backend/supabase/schema.sql`](./backend/supabase/schema.sql) for fresh installs + incremental [`backend/supabase/migrations/`](./backend/supabase/migrations/) (`001`–`017`) for existing DBs.
+**Source of truth:** [`backend/supabase/schema.sql`](./backend/supabase/schema.sql) for fresh installs + incremental [`backend/supabase/migrations/`](./backend/supabase/migrations/) (`001`–`019`) for existing DBs.
 
 **Footnote — schema drift:** column `workflow_runs.transient_refinement` exists in migration `006` but is not in `schema.sql`. Prefer migrations when upgrading a live project; sync `schema.sql` when convenient.
 
@@ -307,9 +310,13 @@ erDiagram
   workflow_runs ||--o{ workflow_runs : parent_of
   workflow_runs ||--o{ usage_events : billed_as
   workflow_runs ||--o{ analytics_events : tracked_as
+  workflow_runs ||--o{ document_chunks : indexed_for_rag
 
   user_template_versions ||--o{ user_template_versions : parent_of
   user_template_versions ||--o{ refinement_events : logs
+
+  users ||--o{ document_chunks : owns
+  users ||--o{ eval_runs : admin_evals
 
   pipeline_templates }o--o| workflows : soft_parent_template_id
   pipeline_templates }o--o| workflow_runs : soft_template_id
@@ -405,11 +412,26 @@ Soft links (`parent_template_id`, `template_id`) are **text**, not FKs — maste
 #### `usage_events`
 | | |
 |---|---|
-| **Purpose** | Metering: **pages** (extraction pool) and **outbound** units (email/Sheets) |
+| **Purpose** | Metering: **pages** (extraction pool) and **outbound** units (email / Sheets / Ask-docs tokens) |
 | **FK** | `user_id` CASCADE; `run_id` SET NULL |
 | **Indexes** | `idx_usage_events_user_month (user_id, created_at)` |
-| **event_type** | Pages: `extraction`, `refine`, `refine_preview`, `extract_api`, `refund:*`. Outbound: `email_sent`, `sheets_push` (counted separately; **not** in page sum) |
-| **pages column** | For outbound rows, `pages` stores **unit count** (usually 1), not document pages |
+| **event_type** | Pages: `extraction`, `refine`, `refine_preview`, `extract_api`, `refund:*`. Outbound (separate pools; **not** in page sum): `email_sent`, `sheets_push`, `rag_chat` |
+| **pages column** | Overloaded unit count: document pages for page events; **1** per email/Sheets push; **token count** for `rag_chat`. Refunds are negative rows. |
+| **Fallback** | Without Supabase, in-process list in `metering.py` (tests/dev only) |
+
+#### `document_chunks`
+| | |
+|---|---|
+| **Purpose** | RAG: embedded text chunks (pgvector) for Ask-docs chat over a completed run |
+| **FK** | `run_id`, `user_id` |
+| **Feature flag** | `RAG_ENABLED` — index on run complete + lazy index on chat if missing |
+| **RPC** | `match_document_chunks` (similarity search) |
+
+#### `eval_runs` / `eval_run_items`
+| | |
+|---|---|
+| **Purpose** | Admin golden-set eval harness results (on-demand; not per user run) |
+| **Access** | `ADMIN_API_KEY` routes under `/api/admin/evals` |
 
 #### `waitlist`
 | | |
@@ -452,6 +474,8 @@ Soft links (`parent_template_id`, `template_id`) are **text**, not FKs — maste
 | 015 | `waitlist.feedback` |
 | 016 | `audit_events` |
 | 017 | RLS enabled on all app tables (no client policies) |
+| 018 | `eval_runs`, `eval_run_items` |
+| 019 | `document_chunks` + pgvector `match_document_chunks` |
 
 ---
 
@@ -657,13 +681,16 @@ Hard caps (fail-closed). Soft UI warnings (e.g. account amber bar) never allow s
 | Refines / run lineage | `MAX_REFINES_PER_RUN=10` | **429** | Enforced on **plan and apply** |
 | Emails / month | `FREE_EMAIL_LIMIT_MONTHLY=20` | **429** | `email_sent` units (HTTP + agents + workflow delivery) |
 | Sheets / month | `FREE_SHEETS_LIMIT_MONTHLY=20` | **429** | `sheets_push` units |
+| Ask-docs tokens / month | `FREE_RAG_TOKEN_LIMIT_MONTHLY=100000` | **429** | `rag_chat` — query embed + answer LLM tokens (index-on-complete / lazy index **not** charged to this pool) |
 | Global pages / day (UTC) | `GLOBAL_DAILY_PAGE_LIMIT=100` | **503** | Cross-user budget brake |
-| OpenAI $ / day (est.) | `OPENAI_DAILY_BUDGET_USD=1.0` | fail extract | Token estimate in `openai_cost.py` / `openai_client.py`; `0` disables; **in-process** (single-replica) |
+| OpenAI $ / day (est.) | `OPENAI_DAILY_BUDGET_USD=1.0` | fail extract / chat | Token estimate in `openai_cost.py`; `0` disables; **in-process** (single-replica) — separate from per-user `usage_events` |
 | Pages / file | `MAX_PAGES_PER_FILE=10` | upload reject | Client + server; not the monthly pool |
 | Files / upload | hardcoded 10 | 400 | `upload_service` |
 | Adhoc/template/refine rate | `RATE_LIMIT_RUNS_ADHOC=10/minute` | 429 slowapi | Abuse throttle |
 | Upload rate | `RATE_LIMIT_UPLOAD=20/minute` | 429 slowapi | |
-| Refine plan rate | `RATE_LIMIT_REFINE_PLAN` | 429 slowapi | |
+| Refine plan / Ask-docs rate | `RATE_LIMIT_REFINE_PLAN` | 429 slowapi | Shared throttle for refine plan + RAG chat |
+
+**Storage:** all per-user meters live in Postgres `usage_events` (sums by `user_id` + `event_type` + month). OpenAI daily USD is **not** in that table.
 
 **Page flow:** `enforce_upload_usage` (check) → `start_run` → `reserve_page_usage` / `charge_run_pages` (check+record under locks) → on failed execute, `refund_usage_for_run` (negative row).
 
@@ -673,9 +700,11 @@ Hard caps (fail-closed). Soft UI warnings (e.g. account amber bar) never allow s
 
 **Outbound:** `reserve_email_usage` / `reserve_sheets_usage` before Resend/Sheets; agents use `ctx.data.user_id`; workflow defaults skip + log when over cap.
 
-**Summary API:** `GET /api/users/me/usage` → pages + emails + sheets used/limits + `resets_at`.
+**Ask-docs (RAG):** `reserve_rag_chat_tokens` (estimate) → `chat_over_run` → `reconcile_rag_chat_tokens` (refund unused / charge overrun); full refund on failure. Still subject to `OPENAI_DAILY_BUDGET_USD`.
 
-Code: `metering.py`, `usage_http.py`, `openai_cost.py`. Frontend: `UsageLimitModal` on 429 (no duplicate toast); toast on 503; waitlist `source` from limit message (`waitlist-source.ts`).
+**Summary API:** `GET /api/users/me/usage` → pages + emails + sheets + `rag_tokens_*` used/limits + `resets_at`. Account UI shows four bars (`free-plan.ts` mirrors backend defaults).
+
+Code: `metering.py`, `usage_http.py`, `openai_cost.py`, `services/rag/`. Frontend: `UsageLimitModal` on 429 (no duplicate toast); toast on 503; waitlist `source` from limit message (`waitlist-source.ts`).
 
 ---
 
@@ -750,9 +779,12 @@ Code: `metering.py`, `usage_http.py`, `openai_cost.py`. Frontend: `UsageLimitMod
 | `FREE_PAGE_LIMIT_MONTHLY` | | `50` |
 | `FREE_EMAIL_LIMIT_MONTHLY` | Outbound email units | `20` |
 | `FREE_SHEETS_LIMIT_MONTHLY` | Outbound Sheets units | `20` |
+| `FREE_RAG_TOKEN_LIMIT_MONTHLY` | Ask-docs tokens (`rag_chat`) | `100000` |
 | `MAX_REFINES_PER_RUN` | | `10` |
 | `GLOBAL_DAILY_PAGE_LIMIT` | | `100` |
 | `OPENAI_DAILY_BUDGET_USD` | Hard estimated gate | `1.0` (`0` = off) |
+| `RAG_ENABLED` | Index + Ask-docs chat | `false` until mig `019` |
+| `OTEL_ENABLED` / `OTEL_EXPORTER_OTLP_ENDPOINT` | Step spans | off until collector |
 | `OCR_ENGINE` | `rapidocr` \| `tesseract` | `rapidocr` |
 | `USE_LAYOUT_PRESERVATION` | Docling for digital PDFs | `true` |
 | `CORS_ORIGINS` | Comma-separated | `http://localhost:3000` |
@@ -824,6 +856,7 @@ frontend/src/app/
 | `components/modals/processing-overlay.tsx` | Blur “Processing your request…” |
 | `components/sheets-share-hint.tsx` | Service-account Editor email |
 | `components/refine-chat.tsx` | Plan Mode refine UX (`in_scope` / Apply) |
+| `components/doc-chat` / results side panel | Ask-docs RAG tab |
 | `components/export-bar.tsx` | Save workflow / email / Sheets (prefills workflow defaults) |
 
 ### How a home run starts
@@ -864,6 +897,9 @@ frontend/src/app/
 | Post-extract validators | `backend/app/services/extraction/validators.py` |
 | Page + outbound metering | `backend/app/services/usage/metering.py` |
 | HTTP usage helpers | `backend/app/api/usage_http.py` |
+| Ask-docs RAG chat | `backend/app/services/rag/`, `POST /api/runs/{id}/chat` |
+| Eval harness | `backend/app/services/evals/`, `/api/admin/evals` |
+| OTel step spans | `backend/app/services/observability/tracing.py` |
 | Integrations status | `backend/app/api/routes/integrations.py` |
 | Persistence switch | `backend/app/persistence/registry.py` |
 | Agent register API | `backend/app/agents/core/registry.py` |
@@ -902,7 +938,7 @@ A: Upload path materializes text once; planner/runner reuse cached document text
 A: Plan Mode clarifies (`in_scope` gate) → optional GPT-4o preview (pages charged first) → Apply reserves pages, runs Groq `pipeline_refiner`, starts **child** `workflow_runs` with `parent_run_id` + version blob. Original run immutable. Cap: `MAX_REFINES_PER_RUN` on both plan and apply. Format/amount cleanup → ensure `transform.normalize`; new conditions → rules with `action`.
 
 **Q: How do you stop free-tier abuse?**  
-A: No anonymous runs (JWT before upload). Monthly page meter, email/Sheets outbound meters, refine cap, global daily page cap, OpenAI daily $ estimate, per-file page limit, slowapi per-user rate limits, refunds on failed runs/previews. UI: hard 429 → `UsageLimitModal`.
+A: No anonymous runs (JWT before upload). Monthly page meter, email/Sheets/Ask-docs outbound meters (`usage_events`), refine cap, global daily page cap, OpenAI daily $ estimate (in-process), per-file page limit, slowapi per-user rate limits, refunds on failed runs/previews/chat. UI: hard 429 → `UsageLimitModal`.
 
 **Q: What’s public without login?**  
 A: Health, integrations status, auth endpoints, waitlist, **template catalog**. Not uploads/runs/document bytes.
@@ -920,7 +956,7 @@ A: Not only in Postgres. Metadata in `user_template_versions`; full payload in p
 A: `GET /api/runs/{id}` polled every 1.5s while `status === "running"` (`useRunPolling`). No websockets yet.
 
 **Q: Sign-in dialog vs account page?**  
-A: Run/sample/nav Sign in → modal + optional pending resume. `/account` is for signed-in settings/usage (pages + emails + Sheets)/integrations. Expired JWT clears storage and re-opens the modal via custom event. Account copy uses stored `auth_provider`.
+A: Run/sample/nav Sign in → modal + optional pending resume. `/account` is for signed-in settings/usage (pages + emails + Sheets + Ask-docs tokens)/integrations. Expired JWT clears storage and re-opens the modal via custom event. Account copy uses stored `auth_provider`.
 
 **Q: Soft delete / cascade?**  
 A: Deleting a user cascades workflows, inbound addresses, usage. Deleting a workflow cascades steps and inbound addresses; runs’ `workflow_id` SET NULL. Version delete cascades refinement_events.
@@ -942,7 +978,7 @@ flowchart LR
   Mailgun -.->|"optional; domain required"| Railway
 ```
 
-Checklist mindset: apply SQL migrations through **`016`** / `schema.sql`, create **private** Storage buckets (`documents`, `user-templates`), set all backend secrets on Railway (incl. `JWT_SECRET_KEY`, `REDIS_URL`, `GOOGLE_CLIENT_ID`, metering caps), deploy a **worker** service (`arq app.jobs.worker.WorkerSettings`), set `NEXT_PUBLIC_*` on Vercel, align `CORS_ORIGINS` + Google OAuth authorized origins for the production origin, keep `AUTH_ALLOW_EMAIL=false`, smoke Google sign-in → upload → run → cross-user 403 → 429 UI.
+Checklist mindset: apply SQL migrations through **`019`** / `schema.sql`, create **private** Storage buckets (`documents`, `user-templates`), set all backend secrets on Railway (incl. `JWT_SECRET_KEY`, `REDIS_URL`, `GOOGLE_CLIENT_ID`, metering caps, `RAG_ENABLED` when ready), deploy a **worker** service (`arq app.jobs.worker.WorkerSettings`), set `NEXT_PUBLIC_*` on Vercel, align `CORS_ORIGINS` + Google OAuth authorized origins for the production origin, keep `AUTH_ALLOW_EMAIL=false`, smoke Google sign-in → upload → run → Ask docs → cross-user 403 → 429 UI.
 
 See [NEXT-STEPS.md](./docs/NEXT-STEPS.md) for current ship order (real-doc testing + launch kit). Deploy details: [DEPLOYMENT.md](./docs/DEPLOYMENT.md). Live API: `https://nexora-api-production-065e.up.railway.app`.
 

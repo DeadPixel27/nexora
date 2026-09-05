@@ -20,6 +20,9 @@ from app.api.usage_http import (
     charge_run_pages,
     charge_run_pages_or_abandon,
     enforce_upload_usage,
+    reconcile_rag_chat_tokens,
+    refund_rag_chat_tokens,
+    reserve_rag_chat_tokens,
 )
 from app.config import settings
 from app.jobs import schedule_run
@@ -419,6 +422,7 @@ async def chat_run_documents(
     from app.api.ownership import require_run_access
     from app.services.llm.openai_cost import OpenAIBudgetError
     from app.services.rag import chat_over_run
+    from app.services.rag.chat import estimate_rag_chat_tokens
 
     run = repo.get_run(run_id)
     if run is None:
@@ -429,17 +433,42 @@ async def chat_run_documents(
             status_code=400,
             detail="Document chat is only available after the run completes.",
         )
+
+    reserved = estimate_rag_chat_tokens(body.question)
+    await reserve_rag_chat_tokens(
+        current_user.user_id, reserved, run_id=run_id
+    )
     try:
         result = await chat_over_run(run_id=run_id, question=body.question)
     except RuntimeError as e:
+        await refund_rag_chat_tokens(
+            current_user.user_id, reserved, run_id=run_id
+        )
         raise HTTPException(status_code=503, detail=str(e)) from e
     except ValueError as e:
+        await refund_rag_chat_tokens(
+            current_user.user_id, reserved, run_id=run_id
+        )
         raise HTTPException(status_code=400, detail=str(e)) from e
     except OpenAIBudgetError as e:
+        await refund_rag_chat_tokens(
+            current_user.user_id, reserved, run_id=run_id
+        )
         raise HTTPException(status_code=429, detail=str(e)) from e
     except Exception as e:
+        await refund_rag_chat_tokens(
+            current_user.user_id, reserved, run_id=run_id
+        )
         logger.exception("RAG chat failed run_id=%s", run_id)
         raise HTTPException(status_code=502, detail="Document chat failed") from e
+
+    actual = int(result.get("tokens_used") or 0)
+    await reconcile_rag_chat_tokens(
+        current_user.user_id,
+        reserved=reserved,
+        actual=actual,
+        run_id=run_id,
+    )
     return RunDocChatResponse(**result)
 
 

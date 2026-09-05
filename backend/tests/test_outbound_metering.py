@@ -17,6 +17,7 @@ from app.services.analytics import events as analytics_events
 from app.services.usage import metering
 from app.services.usage.metering import (
     EMAIL_EVENT_TYPE,
+    RAG_CHAT_EVENT_TYPE,
     SHEETS_EVENT_TYPE,
     UsageLimitError,
     check_outbound_allowed,
@@ -39,6 +40,7 @@ def _reset_outbound_state(monkeypatch):
     monkeypatch.setattr(settings, "free_email_limit_monthly", 20)
     monkeypatch.setattr(settings, "free_sheets_limit_monthly", 20)
     monkeypatch.setattr(settings, "free_page_limit_monthly", 50)
+    monkeypatch.setattr(settings, "free_rag_token_limit_monthly", 100_000)
     yield
     metering.reset_memory_usage()
     analytics_events.reset_memory_analytics()
@@ -263,5 +265,97 @@ async def test_email_route_refunds_unit_when_send_fails(monkeypatch):
     assert response.status_code == 502
     used = await metering.get_user_outbound_usage_this_month(
         "user-1", EMAIL_EVENT_TYPE
+    )
+    assert used == 0
+
+
+@pytest.mark.asyncio
+async def test_rag_tokens_do_not_count_against_page_pool():
+    await record_usage("user-1", 5, event_type="extraction")
+    await record_usage("user-1", 1200, event_type=RAG_CHAT_EVENT_TYPE)
+    assert await get_user_usage_this_month("user-1") == 5
+    used = await metering.get_user_outbound_usage_this_month(
+        "user-1", RAG_CHAT_EVENT_TYPE
+    )
+    assert used == 1200
+
+
+@pytest.mark.asyncio
+async def test_rag_chat_route_returns_429_when_over_cap(monkeypatch):
+    monkeypatch.setattr(settings, "free_rag_token_limit_monthly", 100)
+    monkeypatch.setattr(settings, "rag_enabled", True)
+    await record_usage("user-1", 100, event_type=RAG_CHAT_EVENT_TYPE)
+
+    repo = MemoryRepository()
+    repo.save_run(_completed_run())
+    app.dependency_overrides[get_repo] = lambda: repo
+    override_current_user()
+
+    chat = AsyncMock()
+    monkeypatch.setattr("app.services.rag.chat_over_run", chat)
+
+    response = client.post(
+        "/api/runs/run-1/chat",
+        json={"question": "What is the vendor?"},
+    )
+    assert response.status_code == 429
+    assert "ask-docs" in response.json()["detail"].lower()
+    chat.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_rag_chat_route_records_actual_tokens(monkeypatch):
+    monkeypatch.setattr(settings, "rag_enabled", True)
+
+    repo = MemoryRepository()
+    repo.save_run(_completed_run())
+    app.dependency_overrides[get_repo] = lambda: repo
+    override_current_user()
+
+    monkeypatch.setattr(
+        "app.services.rag.chat_over_run",
+        AsyncMock(
+            return_value={
+                "answer": "Acme",
+                "citations": [],
+                "tokens_used": 42,
+            }
+        ),
+    )
+
+    response = client.post(
+        "/api/runs/run-1/chat",
+        json={"question": "What is the vendor?"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["tokens_used"] == 42
+    used = await metering.get_user_outbound_usage_this_month(
+        "user-1", RAG_CHAT_EVENT_TYPE
+    )
+    assert used == 42
+    assert await get_user_usage_this_month("user-1") == 0
+
+
+@pytest.mark.asyncio
+async def test_rag_chat_route_refunds_on_failure(monkeypatch):
+    monkeypatch.setattr(settings, "rag_enabled", True)
+
+    repo = MemoryRepository()
+    repo.save_run(_completed_run())
+    app.dependency_overrides[get_repo] = lambda: repo
+    override_current_user()
+
+    monkeypatch.setattr(
+        "app.services.rag.chat_over_run",
+        AsyncMock(side_effect=RuntimeError("RAG is disabled")),
+    )
+
+    response = client.post(
+        "/api/runs/run-1/chat",
+        json={"question": "What is the vendor?"},
+    )
+    assert response.status_code == 503
+    used = await metering.get_user_outbound_usage_this_month(
+        "user-1", RAG_CHAT_EVENT_TYPE
     )
     assert used == 0

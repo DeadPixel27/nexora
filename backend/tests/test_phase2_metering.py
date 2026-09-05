@@ -57,6 +57,8 @@ async def test_record_and_summarize_usage():
     assert summary["emails_limit"] == settings.free_email_limit_monthly
     assert summary["sheets_used"] == 0
     assert summary["sheets_limit"] == settings.free_sheets_limit_monthly
+    assert summary["rag_tokens_used"] == 0
+    assert summary["rag_tokens_limit"] == settings.free_rag_token_limit_monthly
     assert summary["resets_at"]
 
 

@@ -53,7 +53,8 @@ async def index_run_documents(
         batch_size = 32
         for i in range(0, len(chunks), batch_size):
             batch = chunks[i : i + batch_size]
-            embeddings.extend(await embed_texts([c.content for c in batch]))
+            batch_emb, _ = await embed_texts([c.content for c in batch])
+            embeddings.extend(batch_emb)
 
         rows = [
             {

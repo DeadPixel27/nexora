@@ -14,6 +14,7 @@ from app.persistence import save_run
 from app.services.analytics.events import log_event
 from app.services.usage.metering import (
     EMAIL_EVENT_TYPE,
+    RAG_CHAT_EVENT_TYPE,
     SHEETS_EVENT_TYPE,
     GlobalCapError,
     UsageLimitError,
@@ -230,6 +231,97 @@ async def refund_sheets_usage(user_id: str, *, run_id: Optional[str] = None) -> 
         )
     except Exception:
         logger.warning("Failed to refund sheets usage user=%s", user_id, exc_info=True)
+
+
+async def reserve_rag_chat_tokens(
+    user_id: str,
+    tokens: int,
+    *,
+    run_id: Optional[str] = None,
+) -> None:
+    """Check+record estimated Ask-docs tokens before the OpenAI calls."""
+    try:
+        await reserve_outbound_usage(
+            user_id,
+            RAG_CHAT_EVENT_TYPE,
+            settings.free_rag_token_limit_monthly,
+            run_id=run_id,
+            units=max(1, tokens),
+        )
+    except Exception as e:
+        raise _http_for_usage_error(e) from e
+
+
+async def reconcile_rag_chat_tokens(
+    user_id: str,
+    *,
+    reserved: int,
+    actual: int,
+    run_id: Optional[str] = None,
+) -> None:
+    """Refund unused estimate or charge overrun after chat completes."""
+    reserved = max(1, reserved)
+    actual = max(0, actual)
+    if actual < reserved:
+        try:
+            await refund_outbound_usage(
+                user_id,
+                RAG_CHAT_EVENT_TYPE,
+                run_id=run_id,
+                units=reserved - actual,
+                reason="rag_token_reconcile",
+            )
+        except Exception:
+            logger.warning(
+                "Failed to refund RAG tokens user=%s", user_id, exc_info=True
+            )
+        return
+    if actual > reserved:
+        try:
+            await reserve_outbound_usage(
+                user_id,
+                RAG_CHAT_EVENT_TYPE,
+                settings.free_rag_token_limit_monthly,
+                run_id=run_id,
+                units=actual - reserved,
+            )
+        except UsageLimitError:
+            # Answer already returned; charge remaining room only.
+            from app.services.usage.metering import get_user_outbound_usage_this_month
+
+            used = await get_user_outbound_usage_this_month(
+                user_id, RAG_CHAT_EVENT_TYPE
+            )
+            room = settings.free_rag_token_limit_monthly - used
+            if room > 0:
+                await record_usage(
+                    user_id,
+                    room,
+                    run_id=run_id,
+                    event_type=RAG_CHAT_EVENT_TYPE,
+                )
+        except Exception:
+            logger.warning(
+                "Failed to charge RAG token overrun user=%s", user_id, exc_info=True
+            )
+
+
+async def refund_rag_chat_tokens(
+    user_id: str,
+    tokens: int,
+    *,
+    run_id: Optional[str] = None,
+) -> None:
+    try:
+        await refund_outbound_usage(
+            user_id,
+            RAG_CHAT_EVENT_TYPE,
+            run_id=run_id,
+            units=max(1, tokens),
+            reason="rag_chat_failed",
+        )
+    except Exception:
+        logger.warning("Failed to refund RAG chat usage user=%s", user_id, exc_info=True)
 
 
 # Back-compat aliases

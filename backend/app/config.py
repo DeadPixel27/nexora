@@ -74,6 +74,8 @@ class Settings(BaseSettings):
     # Outbound free-tier units (separate from page pool)
     free_email_limit_monthly: int = 20
     free_sheets_limit_monthly: int = 20
+    # RAG Ask-docs: OpenAI tokens (embed + chat) per user per calendar month
+    free_rag_token_limit_monthly: int = 100_000
     # BackgroundTasks orphan reclaim (single-replica launch posture)
     orphan_reclaim_on_startup: bool = True
     orphan_run_stale_minutes: int = 30

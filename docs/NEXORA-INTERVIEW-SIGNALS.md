@@ -42,6 +42,7 @@ Scaling / deferral notes live in [SCALING-AND-JOBS.md](./SCALING-AND-JOBS.md).
 - [x] `POST /api/runs/{run_id}/chat` answers a question using top-k similar chunks + LLM; ownership enforced like other run routes.
 - [x] Embeddings count toward OpenAI budget checks (same fail-closed path as extraction).
 - [x] Embedding / chat skipped gracefully when pgvector migration not applied or feature flag off.
+- [x] Per-user Ask-docs token meter (`rag_chat` in `usage_events`, 100k/month default); account usage bar.
 
 ---
 
@@ -49,7 +50,7 @@ Scaling / deferral notes live in [SCALING-AND-JOBS.md](./SCALING-AND-JOBS.md).
 
 - Model routing / cost-per-run UI (follow-on once eval baseline exists).
 - MCP server.
-- Changing launch metering caps or page limits.
+- Charging index-on-complete / lazy-index embedding tokens to the per-user Ask-docs pool (those stay on global `OPENAI_DAILY_BUDGET_USD` only).
 
 ---
 

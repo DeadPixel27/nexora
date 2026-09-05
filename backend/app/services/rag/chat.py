@@ -14,6 +14,13 @@ from app.services.rag import store as rag_store
 logger = logging.getLogger("rag")
 
 
+def estimate_rag_chat_tokens(question: str) -> int:
+    """Conservative pre-charge for embed + retrieval context + answer."""
+    q = max(len((question or "").strip()) // 4, 1)
+    ctx = settings.rag_top_k * max(settings.rag_chunk_size // 4, 1)
+    return q + ctx + 500
+
+
 async def _ensure_indexed(run_id: str) -> int:
     """
     If this run has no chunks yet, build them from cached document text.
@@ -44,9 +51,10 @@ async def chat_over_run(
     """
     Retrieve top-k chunks for ``run_id`` and answer with the chat model.
 
-    Returns answer + citation metadata (filename / chunk_index). Does not
-    echo full retrieved text in the API response by default — only short
-    snippets for grounding UI.
+    Returns answer + citation metadata (filename / chunk_index) and
+    ``tokens_used`` (query embed + answer LLM). Does not echo full
+    retrieved text in the API response by default — only short snippets
+    for grounding UI.
     """
     if not settings.rag_enabled:
         raise RuntimeError(
@@ -57,7 +65,8 @@ async def chat_over_run(
     if not q:
         raise ValueError("Question is required")
 
-    query_emb = (await embed_texts([q]))[0]
+    embeddings, embed_tokens = await embed_texts([q])
+    query_emb = embeddings[0]
     matches = rag_store.match_chunks(
         run_id=run_id,
         query_embedding=query_emb,
@@ -84,6 +93,7 @@ async def chat_over_run(
                 "Wait for extraction to finish, then ask again."
             ),
             "citations": [],
+            "tokens_used": embed_tokens,
         }
 
     context_blocks = []
@@ -112,10 +122,14 @@ async def chat_over_run(
         + f"\n\nQuestion: {q}"
     )
 
-    parsed = await complete_json(system, user)
+    parsed, chat_tokens = await complete_json(system, user, return_usage=True)
     if not isinstance(parsed, dict):
         answer = str(parsed)
     else:
         answer = str(parsed.get("answer") or "").strip() or "I could not form an answer."
 
-    return {"answer": answer, "citations": citations}
+    return {
+        "answer": answer,
+        "citations": citations,
+        "tokens_used": embed_tokens + int(chat_tokens or 0),
+    }

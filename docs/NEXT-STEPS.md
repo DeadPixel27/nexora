@@ -1,7 +1,7 @@
 # Nexora — Next Steps
 
 **Updated:** 2026-09-05  
-**Branch:** `feature/interview-signals`
+**Branch:** `main`
 
 Launch product (V2/V3 + auth/metering) is built. Stack is live on Railway + Vercel. Remaining work below.
 
@@ -11,9 +11,9 @@ Launch product (V2/V3 + auth/metering) is built. Stack is live on Railway + Verc
 
 | # | Task | Est. | Notes |
 |---|------|------|-------|
-| 1 | ~~**Hard usage caps per feature**~~ | done | Pages/extract, refine (cap + out-of-scope refuse), email/Sheets HTTP + agents; clear 429 modal; account shows outbound bars. |
+| 1 | ~~**Hard usage caps per feature**~~ | done | Pages/extract, refine (cap + out-of-scope refuse), email/Sheets HTTP + agents, Ask-docs tokens (`rag_chat`); clear 429 modal; account shows outbound + token bars. |
 | 2 | ~~**Deploy**~~ | done | Supabase + Upstash Redis + Railway API + Worker + Vercel. API: `https://nexora-api-production-065e.up.railway.app`. Mailgun inbound **skipped** (needs a domain you control — Railway `*.up.railway.app` is HTTP only). See [DEPLOYMENT.md](./DEPLOYMENT.md). |
-| 3 | **Interview signals** | in PR | Eval harness + OTel + RAG — [NEXORA-INTERVIEW-SIGNALS.md](./NEXORA-INTERVIEW-SIGNALS.md). Apply migrations `018`/`019`; set `RAG_ENABLED` / `OTEL_*` as needed. |
+| 3 | ~~**Interview signals**~~ | done | Eval harness + OTel + RAG — [NEXORA-INTERVIEW-SIGNALS.md](./NEXORA-INTERVIEW-SIGNALS.md). Migrations `018`/`019`; `RAG_ENABLED=true` on API+Worker. |
 | 4 | **Real-doc testing** | ~3h | 3–5 docs each: invoice, receipt, resume. Score accuracy before extra hardening. |
 | 5 | **Launch kit** | ~2h | 60s Loom + Reddit / IH / HN drafts + README screenshots + live Vercel URL. |
 
@@ -87,4 +87,4 @@ Until this exists, keep files and results for MVP (history + user refine). No 24
 
 ## Immediate next action
 
-Land **interview signals** (evals / OTel / RAG) — see [NEXORA-INTERVIEW-SIGNALS.md](./NEXORA-INTERVIEW-SIGNALS.md). Then real-doc testing (#4) and launch kit (#5). Do not buy a domain or wire Mailgun for this CV demo.
+**Real-doc testing** (#4) then **launch kit** (#5). Interview signals (evals / OTel / RAG + Ask-docs token meter) are shipped. Do not buy a domain or wire Mailgun for this CV demo.
